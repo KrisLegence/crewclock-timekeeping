@@ -1,23 +1,19 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/index.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "public/**",
-      "use": "@vercel/static"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/index.js"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/public/index.html"
-    }
+  "rewrites": [
+    { "source": "/api/time-entries/huddle", "destination": "/api" },
+    { "source": "/api/time-entries/:id", "destination": "/api" },
+    { "source": "/api/time-entries", "destination": "/api" },
+    { "source": "/api/employees", "destination": "/api" },
+    { "source": "/api/cost-codes", "destination": "/api" },
+    { "source": "/api/validation/flags/:id/resolve", "destination": "/api" },
+    { "source": "/api/validation/flags", "destination": "/api" },
+    { "source": "/api/validation/run", "destination": "/api" },
+    { "source": "/api/export/sage300/preview", "destination": "/api" },
+    { "source": "/api/export/sage300", "destination": "/api" },
+    { "source": "/api/audit-logs", "destination": "/api" },
+    { "source": "/api/upload/proof-photo", "destination": "/api" },
+    { "source": "/api/health", "destination": "/api" },
+    { "source": "/api/debug", "destination": "/api" }
   ]
 }
