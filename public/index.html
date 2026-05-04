@@ -120,7 +120,7 @@ function showToast(msg,isError){
   setTimeout(function(){c.innerHTML='';},3000);
 }
 
-function showPage(page){
+window.showPage=function(page){
   currentPage=page;
   document.querySelectorAll('.sidebar a').forEach(function(a){a.classList.toggle('active',a.dataset.page===page);});
   var main=document.getElementById('main-content');
@@ -133,7 +133,7 @@ function showPage(page){
     case 'export':renderExport(main);break;
     case 'audit':renderAudit(main);break;
   }
-}
+};
 
 function api(path,opts){return fetch(API+path,opts).then(function(res){return res.json();});}
 
@@ -645,20 +645,130 @@ window.downloadExport=function(){
   window.open('/api/export/sage300?start_date='+s+'&end_date='+e,'_blank');
 };
 
+var FIELD_LABELS={
+  status:'Status',cost_code_id:'Cost Code ID',per_diem_location:'Per Diem Location',per_diem:'Per Diem Amount',
+  notes:'Notes',reason_code:'Reason Code',reason_note:'Reason Note',approved_by:'Approved By',approved_at:'Approved At',
+  clock_out:'Clock Out',hours_regular:'Regular Hours',hours_overtime:'Overtime Hours',hours_double:'Double Time Hours',
+  updated_at:'Updated At',foreman_id:'Foreman ID',employee_id:'Employee ID',work_date:'Work Date',clock_in:'Clock In',
+  source:'Source',created_by:'Created By',created_at:'Created At',reason_note:'Reason Note'
+};
+var SKIP_FIELDS={id:1,updated_at:1};
+
+function diffStates(before,after){
+  if(!before||!after)return[];
+  var changes=[];
+  var keys=Object.keys(after);
+  for(var i=0;i<keys.length;i++){
+    var k=keys[i];
+    if(SKIP_FIELDS[k])continue;
+    var bv=before[k],av=after[k];
+    if(bv==null)bv='';
+    if(av==null)av='';
+    if(String(bv)!==String(av)){
+      changes.push({field:FIELD_LABELS[k]||k,before:bv===''?'(empty)':String(bv),after:av===''?'(empty)':String(av)});
+    }
+  }
+  return changes;
+}
+
+function fmtAuditVal(v){
+  if(v===null||v===undefined||v==='')return '<span style="color:var(--gray-400);font-style:italic">(empty)</span>';
+  return String(v).replace(/</g,'&lt;');
+}
+
+function buildAuditCSV(logs){
+  var rows=['Timestamp,Action,Entry #,Changed By,Reason,Reason Note,Field Changed,Before,After'];
+  for(var i=0;i<logs.length;i++){
+    var l=logs[i];
+    var who=l.first_name?l.first_name+' '+l.last_name:'User #'+l.changed_by;
+    var ts=new Date(l.created_at).toLocaleString();
+    var changes=diffStates(l.before_state,l.after_state);
+    if(changes.length===0){
+      rows.push(['"'+ts+'"',l.action,'#'+l.record_id,'"'+who+'"','"'+(l.change_reason||'')+'"','"'+(l.change_note||'')+'"','—','—','—'].join(','));
+    }else{
+      for(var j=0;j<changes.length;j++){
+        var c=changes[j];
+        rows.push(['"'+ts+'"',l.action,'#'+l.record_id,'"'+who+'"','"'+(l.change_reason||'')+'"','"'+(l.change_note||'')+'"','"'+c.field+'"','"'+c.before.replace(/"/g,'""')+'"','"'+c.after.replace(/"/g,'""')+'"'].join(','));
+      }
+    }
+  }
+  return rows.join('\r\n');
+}
+
 function renderAudit(el){
   api('/api/audit-logs?limit=100').then(function(logs){
+    window._auditLogs=logs;
+    var tableRows='';
+    if(logs.length===0){
+      tableRows='<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--gray-500)">No audit entries yet. Approve, edit, or punch out a time entry to see the audit trail.</td></tr>';
+    }else{
+      for(var i=0;i<logs.length;i++){
+        var l=logs[i];
+        var who=l.first_name?l.first_name+' '+l.last_name:'User #'+l.changed_by;
+        var ts=new Date(l.created_at).toLocaleString();
+        var changes=diffStates(l.before_state,l.after_state);
+        var actionBadge=l.action==='PUNCH_OUT'?'badge-approved':l.action==='DELETE'?'badge-flagged':'badge-pending';
+        if(changes.length===0){
+          tableRows+='<tr>'+
+            '<td style="font-size:12px;font-family:monospace;white-space:nowrap">'+ts+'</td>'+
+            '<td><span class="badge '+actionBadge+'">'+l.action+'</span></td>'+
+            '<td>#'+l.record_id+'</td>'+
+            '<td style="font-weight:600">'+who+'</td>'+
+            '<td>'+(l.change_reason||'—')+'</td>'+
+            '<td style="color:var(--gray-500);font-style:italic">No field changes</td>'+
+            '<td>—</td><td>—</td></tr>';
+        }else{
+          for(var j=0;j<changes.length;j++){
+            var c=changes[j];
+            tableRows+='<tr'+(j>0?' style="border-top:none"':'')+'>'+
+              (j===0?
+                '<td style="font-size:12px;font-family:monospace;white-space:nowrap" rowspan="'+changes.length+'">'+ts+'</td>'+
+                '<td rowspan="'+changes.length+'"><span class="badge '+actionBadge+'">'+l.action+'</span></td>'+
+                '<td rowspan="'+changes.length+'">#'+l.record_id+'</td>'+
+                '<td rowspan="'+changes.length+'" style="font-weight:600">'+who+'</td>'+
+                '<td rowspan="'+changes.length+'">'+(l.change_reason||'—')+(l.change_note?'<br><span style="font-size:11px;color:var(--gray-500)">'+l.change_note+'</span>':'')+'</td>'
+              :'')+
+              '<td style="font-weight:600;font-size:13px">'+c.field+'</td>'+
+              '<td style="background:#fef2f2;font-family:monospace;font-size:12px;color:#991b1b">'+fmtAuditVal(c.before)+'</td>'+
+              '<td style="background:#f0fdf4;font-family:monospace;font-size:12px;color:#065f46">'+fmtAuditVal(c.after)+'</td>'+
+            '</tr>';
+          }
+        }
+      }
+    }
+
     el.innerHTML=
-      '<div class="page-header"><div><h1>SOX Audit Trail</h1><div class="subtitle">Every change recorded with before/after state.</div></div></div>'+
-      '<div class="card" style="padding:0"><table><thead><tr><th>Timestamp</th><th>Table</th><th>Record</th><th>Action</th><th>Changed By</th><th>Reason</th><th>Details</th></tr></thead>'+
-      '<tbody>'+(logs.length===0?'<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--gray-500)">No audit entries yet. Approve, edit, or punch out a time entry to see the audit trail.</td></tr>':
-      logs.map(function(l){
-        return '<tr><td style="font-size:12px;font-family:monospace">'+new Date(l.created_at).toLocaleString()+'</td><td><span class="badge" style="background:#e0e7ff;color:#3730a3">'+l.table_name+'</span></td><td>#'+l.record_id+'</td><td><span class="badge '+(l.action==='DELETE'?'badge-flagged':'badge-pending')+'">'+l.action+'</span></td><td>'+(l.first_name?l.first_name+' '+l.last_name:'User #'+l.changed_by)+'</td><td>'+(l.change_reason||'—')+'</td><td><button class="btn btn-outline btn-sm" onclick="toggleAuditDetail('+l.id+')">Show</button></td></tr>'+
-        '<tr id="audit-detail-'+l.id+'" style="display:none"><td colspan="7" style="background:var(--gray-50);padding:16px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:16px"><div><strong style="font-size:12px;color:var(--red-500)">BEFORE</strong><pre style="background:#fef2f2;padding:12px;border-radius:6px;font-size:12px;overflow:auto;max-height:300px;margin-top:4px">'+(l.before_state?JSON.stringify(l.before_state,null,2):'N/A')+'</pre></div><div><strong style="font-size:12px;color:var(--green-600)">AFTER</strong><pre style="background:#f0fdf4;padding:12px;border-radius:6px;font-size:12px;overflow:auto;max-height:300px;margin-top:4px">'+(l.after_state?JSON.stringify(l.after_state,null,2):'N/A')+'</pre></div></div></td></tr>';
-      }).join(''))+'</tbody></table></div>';
+      '<div class="page-header"><div><h1>SOX Audit Trail</h1><div class="subtitle">Every change recorded field-by-field with before/after values.</div></div>'+
+        (logs.length>0?'<button class="btn btn-outline" onclick="downloadAuditCSV()">Export to CSV</button>':'')+
+      '</div>'+
+      '<div class="stat-grid">'+
+        '<div class="stat-card"><div class="value">'+logs.length+'</div><div class="label">Total Audit Entries</div></div>'+
+        '<div class="stat-card"><div class="value" style="color:var(--blue-600)">'+logs.filter(function(l){return l.action==='UPDATE';}).length+'</div><div class="label">Edits</div></div>'+
+        '<div class="stat-card"><div class="value" style="color:var(--green-600)">'+logs.filter(function(l){return l.action==='PUNCH_OUT';}).length+'</div><div class="label">Punch Outs</div></div>'+
+      '</div>'+
+      '<div class="card" style="padding:0;overflow:auto">'+
+        '<table><thead><tr>'+
+          '<th>Timestamp</th><th>Action</th><th>Entry</th><th>Changed By</th><th>Reason</th><th>Field Changed</th><th style="background:#fef2f2;color:#991b1b">Before</th><th style="background:#f0fdf4;color:#065f46">After</th>'+
+        '</tr></thead><tbody>'+tableRows+'</tbody></table>'+
+      '</div>';
   });
 }
 
-window.toggleAuditDetail=function(id){var el=document.getElementById('audit-detail-'+id);if(el)el.style.display=el.style.display==='none'?'':'none';};
+window.downloadAuditCSV=function(){
+  var logs=window._auditLogs||[];
+  if(logs.length===0){showToast('No audit entries to export',true);return;}
+  var csv=buildAuditCSV(logs);
+  var blob=new Blob([csv],{type:'text/csv'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;
+  a.download='SOX_Audit_Trail_'+new Date().toISOString().split('T')[0]+'.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Audit trail exported to CSV');
+};
 
 showPage('dashboard');
 </script>
