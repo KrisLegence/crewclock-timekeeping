@@ -290,13 +290,15 @@ module.exports = function handler(req, res) {
         var te = null;
         for (var i = 0; i < DATA.time_entries.length; i++) { if (DATA.time_entries[i].id === teId) { te = DATA.time_entries[i]; break; } }
         if (!te) return send({ error: 'Not found' }, 404);
+        if (!body.status && !body.reason_code) return send({ error: 'reason_code is required for SOX compliance' }, 400);
         var before = JSON.parse(JSON.stringify(te));
         if (body.status) te.status = body.status;
-        if (body.cost_code_id) te.cost_code_id = body.cost_code_id;
+        if (body.cost_code_id) te.cost_code_id = parseInt(body.cost_code_id);
         if (body.per_diem_location !== undefined) {
           te.per_diem_location = body.per_diem_location || null;
           te.per_diem = body.per_diem_location ? calcPerDiem(body.per_diem_location).amount : 0;
         }
+        if (body.notes !== undefined) te.notes = body.notes || null;
         if (body.reason_code) te.reason_code = body.reason_code;
         if (body.reason_note) te.reason_note = body.reason_note;
         if (body.approved_by) te.approved_by = body.approved_by;

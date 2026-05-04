@@ -77,6 +77,16 @@ tr:hover td{background:var(--gray-50)}
 @media(max-width:768px){.sidebar{width:60px}.sidebar .logo span,.sidebar a span{display:none}.main{margin-left:60px;padding:16px}.form-row{grid-template-columns:1fr}.crew-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}}
 .hidden{display:none}
 .pulse{animation:pulse 2s infinite}
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:1500;display:flex;align-items:center;justify-content:center;animation:fadeIn .2s ease}
+.modal{background:#fff;border-radius:12px;box-shadow:var(--shadow-lg);width:560px;max-width:90vw;max-height:90vh;overflow-y:auto;padding:0}
+.modal-header{padding:20px 24px;border-bottom:1px solid var(--gray-200);display:flex;justify-content:space-between;align-items:center}
+.modal-header h2{font-size:18px;font-weight:700;margin:0}
+.modal-header .close-btn{background:none;border:none;font-size:24px;cursor:pointer;color:var(--gray-500);padding:0 4px;line-height:1}
+.modal-header .close-btn:hover{color:var(--gray-900)}
+.modal-body{padding:24px}
+.modal-footer{padding:16px 24px;border-top:1px solid var(--gray-200);display:flex;justify-content:flex-end;gap:12px}
+.read-only-field{padding:8px 12px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius);font-size:14px;color:var(--gray-700)}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
 </style>
 </head>
@@ -362,7 +372,9 @@ window.punchOutOne=function(entryId){
 };
 
 function renderEntries(el){
-  api('/api/time-entries').then(function(entries){
+  Promise.all([api('/api/time-entries'),api('/api/cost-codes')]).then(function(results){
+    var entries=results[0];
+    window._costCodes=results[1];
     var sb=function(s){return({pending:'badge-pending',approved:'badge-approved',flagged:'badge-flagged',rejected:'badge-flagged',clocked_in:'badge-clocked-in'}[s]||'');};
     el.innerHTML=
       '<div class="page-header"><div><h1>Time Entries</h1><div class="subtitle">'+entries.length+' entries</div></div></div>'+
@@ -370,28 +382,132 @@ function renderEntries(el){
         '<table><thead><tr><th>Employee</th><th>Date</th><th>Clock In</th><th>Clock Out</th><th>Cost Code</th><th>Reg</th><th>OT</th><th>DT</th><th>Per Diem</th><th>Source</th><th>Status</th><th>Actions</th></tr></thead>'+
         '<tbody>'+(entries.length===0?'<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--gray-500)">No entries</td></tr>':entries.map(function(e){
           var total=Number(e.hours_regular)+Number(e.hours_overtime)+Number(e.hours_double);
-          return '<tr>'+
+          var canEdit=(e.status==='pending'||e.status==='clocked_in');
+          var needsCostCode=!e.cost_code_value&&e.status!=='clocked_in';
+          return '<tr'+(needsCostCode?' style="background:#fffbeb"':'')+'>'+
             '<td style="font-weight:600">'+e.first_name+' '+e.last_name+'<br><span style="font-size:11px;color:var(--gray-500)">'+e.employee_number+'</span></td>'+
             '<td>'+new Date(e.work_date).toLocaleDateString()+'</td>'+
             '<td style="font-family:monospace;font-size:12px">'+(e.clock_in?fmtTime(e.clock_in):'—')+'</td>'+
             '<td style="font-family:monospace;font-size:12px">'+(e.clock_out?fmtTime(e.clock_out):(e.status==='clocked_in'?'<span class="pulse" style="color:var(--green-600);font-weight:700">ON CLOCK</span>':'—'))+'</td>'+
-            '<td>'+(e.cost_code_value?'<span style="font-family:monospace">'+e.cost_code_value+'</span><br><span style="font-size:11px;color:var(--gray-500)">'+(e.job_number||'')+'</span>':'<span style="color:var(--amber-500);font-size:12px">Unassigned</span>')+'</td>'+
+            '<td>'+(e.cost_code_value?'<span style="font-family:monospace">'+e.cost_code_value+'</span><br><span style="font-size:11px;color:var(--gray-500)">'+(e.job_number||'')+'</span>':'<span style="color:var(--amber-500);font-size:12px;font-weight:600">Unassigned</span>')+'</td>'+
             '<td>'+(total>0?Number(e.hours_regular).toFixed(1):'—')+'</td>'+
             '<td>'+(Number(e.hours_overtime)>0?'<strong style="color:var(--amber-500)">'+Number(e.hours_overtime).toFixed(1)+'</strong>':'—')+'</td>'+
             '<td>'+(Number(e.hours_double)>0?'<strong style="color:var(--red-500)">'+Number(e.hours_double).toFixed(1)+'</strong>':'—')+'</td>'+
             '<td>'+(Number(e.per_diem)>0?'$'+Number(e.per_diem).toFixed(0):'—')+'</td>'+
             '<td><span class="badge" style="background:#e0e7ff;color:#3730a3">'+e.source+'</span></td>'+
             '<td><span class="badge '+sb(e.status)+'">'+e.status.replace('_',' ')+'</span></td>'+
-            '<td>'+(e.status==='pending'?'<button class="btn btn-success btn-sm" onclick="approveEntry('+e.id+')">Approve</button>':'')+'</td>'+
+            '<td style="white-space:nowrap">'+
+              (canEdit?'<button class="btn btn-outline btn-sm" onclick="openEditModal('+e.id+')" style="margin-right:4px">Edit</button>':'')+
+              (e.status==='pending'?'<button class="btn btn-success btn-sm" onclick="approveEntry('+e.id+')">Approve</button>':'')+
+            '</td>'+
           '</tr>';
         }).join(''))+'</tbody></table>'+
-      '</div>';
+      '</div>'+
+      '<div id="edit-modal-container"></div>';
+    window._allEntries=entries;
   });
 }
 
 window.approveEntry=function(id){
   api('/api/time-entries/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'approved',reason_code:'supervisor_override',approved_by:10,changed_by:10})}).then(function(){
     showToast('Entry approved');renderEntries(document.getElementById('main-content'));
+  });
+};
+
+window.openEditModal=function(entryId){
+  var entry=null;
+  var entries=window._allEntries||[];
+  for(var i=0;i<entries.length;i++){if(entries[i].id===entryId){entry=entries[i];break;}}
+  if(!entry)return;
+  var ccs=window._costCodes||[];
+  var locs=[{v:'',l:'No Per Diem'},{v:'TX',l:'Texas (Local) — $69'},{v:'TX_TRAVEL',l:'Texas (Travel) — $235'},{v:'ABQ',l:'Albuquerque, NM — $232'},{v:'DEFAULT',l:'Standard GSA — $166'}];
+  var reasons=[{v:'',l:'Select reason...'},{v:'wrong_cost_code',l:'Wrong cost code correction'},{v:'forgot_to_punch',l:'Forgot to punch in/out'},{v:'supervisor_override',l:'Supervisor override'},{v:'schedule_change',l:'Schedule change'},{v:'other',l:'Other (must explain)'}];
+  var total=Number(entry.hours_regular)+Number(entry.hours_overtime)+Number(entry.hours_double);
+
+  var container=document.getElementById('edit-modal-container');
+  container.innerHTML=
+    '<div class="modal-overlay" id="edit-overlay" onclick="if(event.target===this)closeEditModal()">'+
+      '<div class="modal">'+
+        '<div class="modal-header">'+
+          '<h2>Edit Time Entry #'+entry.id+'</h2>'+
+          '<button class="close-btn" onclick="closeEditModal()">&times;</button>'+
+        '</div>'+
+        '<div class="modal-body">'+
+          '<div style="background:var(--gray-50);border-radius:var(--radius);padding:16px;margin-bottom:20px">'+
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px">'+
+              '<div><strong>Employee</strong><div class="read-only-field">'+entry.first_name+' '+entry.last_name+' ('+entry.employee_number+')</div></div>'+
+              '<div><strong>Date</strong><div class="read-only-field">'+new Date(entry.work_date).toLocaleDateString()+'</div></div>'+
+              '<div><strong>Clock In</strong><div class="read-only-field">'+(entry.clock_in?fmtTime(entry.clock_in):'—')+'</div></div>'+
+              '<div><strong>Clock Out / Hours</strong><div class="read-only-field">'+(entry.clock_out?fmtTime(entry.clock_out)+' ('+total.toFixed(1)+'h)':'On clock')+'</div></div>'+
+            '</div>'+
+          '</div>'+
+          '<div class="form-group">'+
+            '<label>Cost Code *</label>'+
+            '<select id="edit-cc">'+
+              '<option value="">— No cost code —</option>'+
+              ccs.map(function(c){return '<option value="'+c.id+'"'+(entry.cost_code_id===c.id?' selected':'')+'>'+c.code+' — '+c.description+' ('+c.job_number+')</option>';}).join('')+
+            '</select>'+
+          '</div>'+
+          '<div class="form-group">'+
+            '<label>Per Diem Location</label>'+
+            '<select id="edit-pd">'+
+              locs.map(function(l){return '<option value="'+l.v+'"'+(entry.per_diem_location===l.v?' selected':'')+'>'+l.l+'</option>';}).join('')+
+            '</select>'+
+          '</div>'+
+          '<div class="form-group">'+
+            '<label>Notes</label>'+
+            '<textarea id="edit-notes" rows="2" placeholder="Add notes about this entry...">'+(entry.notes||'')+'</textarea>'+
+          '</div>'+
+          '<div style="border-top:1px solid var(--gray-200);padding-top:16px;margin-top:16px">'+
+            '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--radius);padding:12px 16px;margin-bottom:16px">'+
+              '<strong style="font-size:13px;color:#92400e">SOX Compliance: Reason required for all edits</strong>'+
+            '</div>'+
+            '<div class="form-group">'+
+              '<label>Reason Code *</label>'+
+              '<select id="edit-reason" onchange="document.getElementById(\'edit-reason-note-wrap\').style.display=this.value===\'other\'?\'block\':\'none\'">'+
+                reasons.map(function(r){return '<option value="'+r.v+'">'+r.l+'</option>';}).join('')+
+              '</select>'+
+            '</div>'+
+            '<div class="form-group" id="edit-reason-note-wrap" style="display:none">'+
+              '<label>Explanation *</label>'+
+              '<textarea id="edit-reason-note" rows="2" placeholder="Explain why this edit is needed..."></textarea>'+
+            '</div>'+
+          '</div>'+
+        '</div>'+
+        '<div class="modal-footer">'+
+          '<button class="btn btn-outline" onclick="closeEditModal()">Cancel</button>'+
+          '<button class="btn btn-primary" onclick="saveEdit('+entry.id+')">Save Changes</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+};
+
+window.closeEditModal=function(){
+  var container=document.getElementById('edit-modal-container');
+  if(container)container.innerHTML='';
+};
+
+window.saveEdit=function(entryId){
+  var reason=document.getElementById('edit-reason').value;
+  if(!reason){showToast('Reason code is REQUIRED for SOX compliance',true);return;}
+  if(reason==='other'){
+    var note=(document.getElementById('edit-reason-note').value||'').trim();
+    if(note.length<5){showToast('Explanation required (min 5 chars) for "Other"',true);return;}
+  }
+  var ccVal=document.getElementById('edit-cc').value;
+  var body={
+    cost_code_id:ccVal?parseInt(ccVal):undefined,
+    per_diem_location:document.getElementById('edit-pd').value||'',
+    notes:document.getElementById('edit-notes').value||'',
+    reason_code:reason,
+    reason_note:document.getElementById('edit-reason-note')?document.getElementById('edit-reason-note').value:'',
+    changed_by:10
+  };
+  api('/api/time-entries/'+entryId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(result){
+    if(result.error){showToast('Error: '+result.error,true);return;}
+    showToast('Entry updated — audit trail recorded');
+    closeEditModal();
+    renderEntries(document.getElementById('main-content'));
   });
 };
 
