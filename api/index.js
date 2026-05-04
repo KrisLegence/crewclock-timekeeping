@@ -28,7 +28,6 @@ module.exports = function handler(req, res) {
       res.end(JSON.stringify(data));
     }
 
-    // ---------- seed data (lives in serverless memory per invocation) ----------
     var PER_DIEM_RATES = {
       TX: { meals: 69, lodging: 0 }, TX_TRAVEL: { meals: 69, lodging: 166 },
       ABQ: { meals: 74, lodging: 158 }, DEFAULT: { meals: 59, lodging: 107 }
@@ -48,8 +47,10 @@ module.exports = function handler(req, res) {
       };
     }
 
-    var today = new Date().toISOString().split('T')[0];
+    var now = new Date();
+    var today = now.toISOString().split('T')[0];
     var yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    var morningToday = today + 'T06:30:00.000Z';
 
     var DATA = {
       employees: [
@@ -80,34 +81,35 @@ module.exports = function handler(req, res) {
         {id:8,code:'9000-100',description:'General Conditions',job_number:'JOB-2026-001',phase:'Overhead',category:'Overhead',is_active:true}
       ],
       time_entries: [
-        {id:1,employee_id:1,cost_code_id:1,work_date:yesterday,hours_regular:8,hours_overtime:0,hours_double:0,per_diem:0,per_diem_location:null,source:'huddle',status:'pending',foreman_id:1,notes:null,reason_code:null,reason_note:null,created_by:1,approved_by:null,created_at:yesterday,updated_at:yesterday},
-        {id:2,employee_id:2,cost_code_id:1,work_date:yesterday,hours_regular:8,hours_overtime:0,hours_double:0,per_diem:0,per_diem_location:null,source:'huddle',status:'pending',foreman_id:1,notes:null,reason_code:null,reason_note:null,created_by:1,approved_by:null,created_at:yesterday,updated_at:yesterday},
-        {id:3,employee_id:3,cost_code_id:1,work_date:yesterday,hours_regular:8,hours_overtime:0,hours_double:0,per_diem:0,per_diem_location:null,source:'huddle',status:'approved',foreman_id:1,notes:null,reason_code:null,reason_note:null,created_by:1,approved_by:10,created_at:yesterday,updated_at:yesterday},
-        {id:4,employee_id:4,cost_code_id:2,work_date:yesterday,hours_regular:8,hours_overtime:2,hours_double:0,per_diem:0,per_diem_location:null,source:'huddle',status:'approved',foreman_id:1,notes:null,reason_code:null,reason_note:null,created_by:1,approved_by:10,created_at:yesterday,updated_at:yesterday},
-        {id:5,employee_id:7,cost_code_id:3,work_date:today,hours_regular:8,hours_overtime:0,hours_double:0,per_diem:232,per_diem_location:'ABQ',source:'huddle',status:'pending',foreman_id:6,notes:null,reason_code:null,reason_note:null,created_by:6,approved_by:null,created_at:today,updated_at:today},
-        {id:6,employee_id:8,cost_code_id:3,work_date:today,hours_regular:8,hours_overtime:0,hours_double:0,per_diem:232,per_diem_location:'ABQ',source:'huddle',status:'pending',foreman_id:6,notes:null,reason_code:null,reason_note:null,created_by:6,approved_by:null,created_at:today,updated_at:today},
-        {id:7,employee_id:11,cost_code_id:1,work_date:today,hours_regular:8,hours_overtime:4,hours_double:6,per_diem:0,per_diem_location:null,source:'manual',status:'pending',foreman_id:null,notes:'18h day will be flagged',reason_code:'supervisor_override',reason_note:null,created_by:10,approved_by:null,created_at:today,updated_at:today}
+        {id:1,employee_id:1,cost_code_id:1,work_date:yesterday,clock_in:yesterday+'T06:00:00.000Z',clock_out:yesterday+'T14:00:00.000Z',hours_regular:8,hours_overtime:0,hours_double:0,per_diem:0,per_diem_location:null,source:'huddle',status:'pending',foreman_id:1,notes:null,reason_code:null,reason_note:null,created_by:1,approved_by:null,created_at:yesterday,updated_at:yesterday},
+        {id:2,employee_id:2,cost_code_id:1,work_date:yesterday,clock_in:yesterday+'T06:00:00.000Z',clock_out:yesterday+'T14:00:00.000Z',hours_regular:8,hours_overtime:0,hours_double:0,per_diem:0,per_diem_location:null,source:'huddle',status:'pending',foreman_id:1,notes:null,reason_code:null,reason_note:null,created_by:1,approved_by:null,created_at:yesterday,updated_at:yesterday},
+        {id:3,employee_id:3,cost_code_id:1,work_date:yesterday,clock_in:yesterday+'T06:00:00.000Z',clock_out:yesterday+'T14:00:00.000Z',hours_regular:8,hours_overtime:0,hours_double:0,per_diem:0,per_diem_location:null,source:'huddle',status:'approved',foreman_id:1,notes:null,reason_code:null,reason_note:null,created_by:1,approved_by:10,created_at:yesterday,updated_at:yesterday},
+        {id:4,employee_id:4,cost_code_id:2,work_date:yesterday,clock_in:yesterday+'T06:00:00.000Z',clock_out:yesterday+'T16:00:00.000Z',hours_regular:8,hours_overtime:2,hours_double:0,per_diem:0,per_diem_location:null,source:'huddle',status:'approved',foreman_id:1,notes:null,reason_code:null,reason_note:null,created_by:1,approved_by:10,created_at:yesterday,updated_at:yesterday},
+        {id:5,employee_id:7,cost_code_id:3,work_date:today,clock_in:morningToday,clock_out:null,hours_regular:0,hours_overtime:0,hours_double:0,per_diem:0,per_diem_location:null,source:'huddle',status:'clocked_in',foreman_id:6,notes:null,reason_code:null,reason_note:null,created_by:6,approved_by:null,created_at:today,updated_at:today},
+        {id:6,employee_id:8,cost_code_id:null,work_date:today,clock_in:morningToday,clock_out:null,hours_regular:0,hours_overtime:0,hours_double:0,per_diem:0,per_diem_location:null,source:'huddle',status:'clocked_in',foreman_id:6,notes:null,reason_code:null,reason_note:null,created_by:6,approved_by:null,created_at:today,updated_at:today},
+        {id:7,employee_id:13,cost_code_id:null,work_date:today,clock_in:morningToday,clock_out:null,hours_regular:0,hours_overtime:0,hours_double:0,per_diem:0,per_diem_location:null,source:'huddle',status:'clocked_in',foreman_id:6,notes:null,reason_code:null,reason_note:null,created_by:6,approved_by:null,created_at:today,updated_at:today},
+        {id:8,employee_id:11,cost_code_id:1,work_date:today,clock_in:today+'T05:00:00.000Z',clock_out:today+'T23:00:00.000Z',hours_regular:8,hours_overtime:4,hours_double:6,per_diem:0,per_diem_location:null,source:'manual',status:'pending',foreman_id:null,notes:'18h day will be flagged',reason_code:'supervisor_override',reason_note:null,created_by:10,approved_by:null,created_at:today,updated_at:today}
       ],
       audit_logs: [],
       validation_flags: []
     };
 
-    var nextEntryId = 8;
+    var nextEntryId = 9;
     var nextAuditId = 1;
     var nextFlagId = 1;
 
     function enrichEntry(te) {
       var emp = null; var cc = null;
       for (var i = 0; i < DATA.employees.length; i++) { if (DATA.employees[i].id === te.employee_id) { emp = DATA.employees[i]; break; } }
-      for (var j = 0; j < DATA.cost_codes.length; j++) { if (DATA.cost_codes[j].id === te.cost_code_id) { cc = DATA.cost_codes[j]; break; } }
+      if (te.cost_code_id) { for (var j = 0; j < DATA.cost_codes.length; j++) { if (DATA.cost_codes[j].id === te.cost_code_id) { cc = DATA.cost_codes[j]; break; } } }
       emp = emp || {}; cc = cc || {};
       var result = {};
       var keys = Object.keys(te);
       for (var k = 0; k < keys.length; k++) result[keys[k]] = te[keys[k]];
       result.first_name = emp.first_name; result.last_name = emp.last_name;
       result.employee_number = emp.employee_number; result.hourly_rate = emp.hourly_rate;
-      result.cost_code_value = cc.code; result.cost_code_desc = cc.description;
-      result.job_number = cc.job_number; result.category = cc.category;
+      result.cost_code_value = cc.code || null; result.cost_code_desc = cc.description || null;
+      result.job_number = cc.job_number || null; result.category = cc.category || null;
       return result;
     }
 
@@ -158,7 +160,9 @@ module.exports = function handler(req, res) {
     }
 
     if (p === '/api/health') {
-      return send({ status: 'ok', employees: DATA.employees.length, entries: DATA.time_entries.length, ts: new Date().toISOString() });
+      var clockedIn = 0;
+      for (var hi = 0; hi < DATA.time_entries.length; hi++) { if (DATA.time_entries[hi].status === 'clocked_in') clockedIn++; }
+      return send({ status: 'ok', employees: DATA.employees.length, entries: DATA.time_entries.length, clocked_in: clockedIn, ts: new Date().toISOString() });
     }
 
     if (p === '/api/employees' && m === 'GET') {
@@ -173,27 +177,108 @@ module.exports = function handler(req, res) {
       return send(codes);
     }
 
+    // PUNCH IN — foreman selects crew, records clock-in time only
+    if (p === '/api/time-entries/punch-in' && m === 'POST') {
+      return parseBody().then(function(body) {
+        if (!body.employee_ids || !body.employee_ids.length) return send({ error: 'employee_ids required' }, 400);
+        var punchTime = body.clock_in || new Date().toISOString();
+        var workDate = punchTime.split('T')[0];
+        var results = [];
+        var alreadyIn = [];
+        for (var i = 0; i < body.employee_ids.length; i++) {
+          var empId = body.employee_ids[i];
+          var already = false;
+          for (var di = 0; di < DATA.time_entries.length; di++) {
+            var t = DATA.time_entries[di];
+            if (t.employee_id === empId && t.work_date === workDate && t.status === 'clocked_in') { already = true; break; }
+          }
+          if (already) {
+            var ae = null;
+            for (var ai = 0; ai < DATA.employees.length; ai++) { if (DATA.employees[ai].id === empId) { ae = DATA.employees[ai]; break; } }
+            alreadyIn.push((ae ? ae.first_name + ' ' + ae.last_name : 'ID ' + empId));
+            continue;
+          }
+          var entry = {
+            id: nextEntryId++, employee_id: empId, cost_code_id: null, work_date: workDate,
+            clock_in: punchTime, clock_out: null,
+            hours_regular: 0, hours_overtime: 0, hours_double: 0,
+            per_diem: 0, per_diem_location: null,
+            source: 'huddle', status: 'clocked_in', foreman_id: body.foreman_id || 1,
+            notes: null, reason_code: null, reason_note: null,
+            created_by: body.foreman_id || 1, approved_by: null,
+            created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+          };
+          DATA.time_entries.push(entry);
+          results.push(enrichEntry(entry));
+        }
+        return send({ punched_in: results.length, already_clocked_in: alreadyIn, entries: results }, 201);
+      });
+    }
+
+    // PUNCH OUT — sets clock_out, auto-calculates hours
+    if (p === '/api/time-entries/punch-out' && m === 'POST') {
+      return parseBody().then(function(body) {
+        if (!body.entry_ids || !body.entry_ids.length) return send({ error: 'entry_ids required' }, 400);
+        var punchTime = body.clock_out || new Date().toISOString();
+        var results = [];
+        for (var i = 0; i < body.entry_ids.length; i++) {
+          var entryId = body.entry_ids[i];
+          var te = null;
+          for (var j = 0; j < DATA.time_entries.length; j++) { if (DATA.time_entries[j].id === entryId) { te = DATA.time_entries[j]; break; } }
+          if (!te || te.status !== 'clocked_in') continue;
+          var before = JSON.parse(JSON.stringify(te));
+          te.clock_out = punchTime;
+          var diffMs = new Date(punchTime).getTime() - new Date(te.clock_in).getTime();
+          var totalHours = Math.round((diffMs / 3600000) * 100) / 100;
+          if (totalHours < 0) totalHours = 0;
+          var hrs = calcHours(totalHours);
+          te.hours_regular = hrs.regular;
+          te.hours_overtime = hrs.overtime;
+          te.hours_double = hrs.doubleTime;
+          te.status = 'pending';
+          te.updated_at = new Date().toISOString();
+          DATA.audit_logs.push({ id: nextAuditId++, table_name: 'time_entries', record_id: te.id,
+            action: 'PUNCH_OUT', before_state: before, after_state: JSON.parse(JSON.stringify(te)),
+            changed_by: body.foreman_id || 1, change_reason: 'punch_out', change_note: 'Clocked out by foreman',
+            ip_address: null, user_agent: req.headers['user-agent'] || null,
+            created_at: new Date().toISOString() });
+          results.push(enrichEntry(te));
+        }
+        return send({ punched_out: results.length, entries: results });
+      });
+    }
+
+    // GET currently clocked-in employees
+    if (p === '/api/time-entries/clocked-in' && m === 'GET') {
+      var clockedRows = [];
+      for (var ci = 0; ci < DATA.time_entries.length; ci++) {
+        if (DATA.time_entries[ci].status === 'clocked_in') {
+          clockedRows.push(enrichEntry(DATA.time_entries[ci]));
+        }
+      }
+      clockedRows.sort(function(a, b) { return (a.last_name || '').localeCompare(b.last_name || ''); });
+      return send(clockedRows);
+    }
+
+    // Legacy huddle endpoint — kept for backwards compatibility, now does punch-in
     if (p === '/api/time-entries/huddle' && m === 'POST') {
       return parseBody().then(function(body) {
         if (!body.employee_ids || !body.employee_ids.length) return send({ error: 'employee_ids required' }, 400);
-        var hours = calcHours(body.total_hours || 8);
-        var pd = body.per_diem_location ? calcPerDiem(body.per_diem_location) : { amount: 0 };
+        var punchTime = new Date().toISOString();
+        var workDate = (body.work_date || punchTime.split('T')[0]);
         var results = [];
         for (var i = 0; i < body.employee_ids.length; i++) {
           var empId = body.employee_ids[i];
-          var dup = false;
-          for (var di = 0; di < DATA.time_entries.length; di++) {
-            var t = DATA.time_entries[di];
-            if (t.employee_id === empId && t.work_date === body.work_date && t.cost_code_id === body.cost_code_id && t.status !== 'rejected') { dup = true; break; }
-          }
-          if (dup) continue;
-          var entry = { id: nextEntryId++, employee_id: empId, cost_code_id: body.cost_code_id, work_date: body.work_date,
-            hours_regular: hours.regular, hours_overtime: hours.overtime, hours_double: hours.doubleTime,
-            per_diem: pd.amount, per_diem_location: body.per_diem_location || null,
-            source: 'huddle', status: 'pending', foreman_id: body.foreman_id || 1,
-            notes: body.notes || null, reason_code: null, reason_note: null,
+          var entry = {
+            id: nextEntryId++, employee_id: empId, cost_code_id: null, work_date: workDate,
+            clock_in: punchTime, clock_out: null,
+            hours_regular: 0, hours_overtime: 0, hours_double: 0,
+            per_diem: 0, per_diem_location: null,
+            source: 'huddle', status: 'clocked_in', foreman_id: body.foreman_id || 1,
+            notes: null, reason_code: null, reason_note: null,
             created_by: body.foreman_id || 1, approved_by: null,
-            created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+            created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+          };
           DATA.time_entries.push(entry);
           results.push(entry);
         }
@@ -216,7 +301,9 @@ module.exports = function handler(req, res) {
         var hours = calcHours(body.total_hours || 0);
         var pd = body.per_diem_location ? calcPerDiem(body.per_diem_location) : { amount: 0 };
         var entry = { id: nextEntryId++, employee_id: body.employee_id, cost_code_id: body.cost_code_id,
-          work_date: body.work_date, hours_regular: hours.regular, hours_overtime: hours.overtime,
+          work_date: body.work_date,
+          clock_in: body.clock_in || null, clock_out: body.clock_out || null,
+          hours_regular: hours.regular, hours_overtime: hours.overtime,
           hours_double: hours.doubleTime, per_diem: pd.amount, per_diem_location: body.per_diem_location || null,
           source: body.source || 'manual', status: 'pending', foreman_id: body.foreman_id || null,
           notes: body.notes || null, reason_code: body.reason_code || null,
@@ -237,6 +324,10 @@ module.exports = function handler(req, res) {
         var before = JSON.parse(JSON.stringify(te));
         if (body.status) te.status = body.status;
         if (body.cost_code_id) te.cost_code_id = body.cost_code_id;
+        if (body.per_diem_location !== undefined) {
+          te.per_diem_location = body.per_diem_location || null;
+          te.per_diem = body.per_diem_location ? calcPerDiem(body.per_diem_location).amount : 0;
+        }
         if (body.reason_code) te.reason_code = body.reason_code;
         if (body.reason_note) te.reason_note = body.reason_note;
         if (body.approved_by) te.approved_by = body.approved_by;
@@ -261,7 +352,7 @@ module.exports = function handler(req, res) {
         for (var a = 0; a < DATA.time_entries.length; a++) { if (DATA.time_entries[a].id === vf.time_entry_id) { vte = DATA.time_entries[a]; break; } }
         vte = vte || {};
         for (var b = 0; b < DATA.employees.length; b++) { if (DATA.employees[b].id === vte.employee_id) { vemp = DATA.employees[b]; break; } }
-        for (var c = 0; c < DATA.cost_codes.length; c++) { if (DATA.cost_codes[c].id === vte.cost_code_id) { vcc = DATA.cost_codes[c]; break; } }
+        if (vte.cost_code_id) { for (var c = 0; c < DATA.cost_codes.length; c++) { if (DATA.cost_codes[c].id === vte.cost_code_id) { vcc = DATA.cost_codes[c]; break; } } }
         vemp = vemp || {}; vcc = vcc || {};
         var row = {};
         var vfKeys = Object.keys(vf);
@@ -271,7 +362,7 @@ module.exports = function handler(req, res) {
         row.entry_status = vte.status; row.source = vte.source;
         row.first_name = vemp.first_name; row.last_name = vemp.last_name;
         row.employee_number = vemp.employee_number;
-        row.cost_code_value = vcc.code; row.job_number = vcc.job_number;
+        row.cost_code_value = vcc.code || null; row.job_number = vcc.job_number || null;
         vrows.push(row);
       }
       return send(vrows);
@@ -281,7 +372,7 @@ module.exports = function handler(req, res) {
       var vflags = [];
       for (var vi2 = 0; vi2 < DATA.time_entries.length; vi2++) {
         var vte2 = DATA.time_entries[vi2];
-        if (vte2.status === 'rejected') continue;
+        if (vte2.status === 'rejected' || vte2.status === 'clocked_in') continue;
         var vtotal = Number(vte2.hours_regular) + Number(vte2.hours_overtime) + Number(vte2.hours_double);
         if (vtotal >= 16) {
           var vemp2 = null;
@@ -289,6 +380,13 @@ module.exports = function handler(req, res) {
           vemp2 = vemp2 || {};
           vflags.push({ time_entry_id: vte2.id, flag_type: 'excessive_hours',
             flag_message: (vemp2.first_name||'') + ' ' + (vemp2.last_name||'') + ' logged ' + vtotal + 'h — exceeds 16h threshold' });
+        }
+        if (!vte2.cost_code_id && vte2.status !== 'clocked_in') {
+          var vemp3 = null;
+          for (var ve2 = 0; ve2 < DATA.employees.length; ve2++) { if (DATA.employees[ve2].id === vte2.employee_id) { vemp3 = DATA.employees[ve2]; break; } }
+          vemp3 = vemp3 || {};
+          vflags.push({ time_entry_id: vte2.id, flag_type: 'missing_cost_code',
+            flag_message: (vemp3.first_name||'') + ' ' + (vemp3.last_name||'') + ' — no cost code assigned' });
         }
       }
       var ins = 0;
@@ -329,7 +427,7 @@ module.exports = function handler(req, res) {
         if (ete.status !== 'approved' || ete.work_date < q.start_date || ete.work_date > q.end_date) continue;
         var eemp = null; var ecc = null;
         for (var e1 = 0; e1 < DATA.employees.length; e1++) { if (DATA.employees[e1].id === ete.employee_id) { eemp = DATA.employees[e1]; break; } }
-        for (var e2 = 0; e2 < DATA.cost_codes.length; e2++) { if (DATA.cost_codes[e2].id === ete.cost_code_id) { ecc = DATA.cost_codes[e2]; break; } }
+        if (ete.cost_code_id) { for (var e2 = 0; e2 < DATA.cost_codes.length; e2++) { if (DATA.cost_codes[e2].id === ete.cost_code_id) { ecc = DATA.cost_codes[e2]; break; } } }
         eemp = eemp || {}; ecc = ecc || {};
         exEntries.push({ employee_number: eemp.employee_number, work_date: ete.work_date, job_number: ecc.job_number,
           cost_code: ecc.code, category: ecc.category, hourly_rate: eemp.hourly_rate,
@@ -343,7 +441,7 @@ module.exports = function handler(req, res) {
       for (var li = 1; li < lines.length; li++) {
         var vals = lines[li].split(',');
         var obj = {};
-        for (var hi = 0; hi < hdr.length; hi++) obj[hdr[hi]] = vals[hi] || '';
+        for (var hii = 0; hii < hdr.length; hii++) obj[hdr[hii]] = vals[hii] || '';
         pRows.push(obj);
       }
       var sd = q.start_date.replace(/-/g, '');
@@ -354,12 +452,12 @@ module.exports = function handler(req, res) {
     if (p === '/api/export/sage300' && m === 'GET') {
       if (!q.start_date || !q.end_date) return send({ error: 'dates required' }, 400);
       var dlEntries = [];
-      for (var di = 0; di < DATA.time_entries.length; di++) {
-        var dte = DATA.time_entries[di];
+      for (var dli = 0; dli < DATA.time_entries.length; dli++) {
+        var dte = DATA.time_entries[dli];
         if (dte.status !== 'approved' || dte.work_date < q.start_date || dte.work_date > q.end_date) continue;
         var demp = null; var dcc = null;
         for (var d1 = 0; d1 < DATA.employees.length; d1++) { if (DATA.employees[d1].id === dte.employee_id) { demp = DATA.employees[d1]; break; } }
-        for (var d2 = 0; d2 < DATA.cost_codes.length; d2++) { if (DATA.cost_codes[d2].id === dte.cost_code_id) { dcc = DATA.cost_codes[d2]; break; } }
+        if (dte.cost_code_id) { for (var d2 = 0; d2 < DATA.cost_codes.length; d2++) { if (DATA.cost_codes[d2].id === dte.cost_code_id) { dcc = DATA.cost_codes[d2]; break; } } }
         demp = demp || {}; dcc = dcc || {};
         dlEntries.push({ employee_number: demp.employee_number, work_date: dte.work_date, job_number: dcc.job_number,
           cost_code: dcc.code, category: dcc.category, hourly_rate: demp.hourly_rate,
@@ -377,10 +475,10 @@ module.exports = function handler(req, res) {
 
     if (p === '/api/audit-logs' && m === 'GET') {
       var aRows = [];
-      for (var ai = 0; ai < DATA.audit_logs.length; ai++) {
-        var al = DATA.audit_logs[ai];
+      for (var ali = 0; ali < DATA.audit_logs.length; ali++) {
+        var al = DATA.audit_logs[ali];
         var aemp = null;
-        for (var ae = 0; ae < DATA.employees.length; ae++) { if (DATA.employees[ae].id === al.changed_by) { aemp = DATA.employees[ae]; break; } }
+        for (var aei = 0; aei < DATA.employees.length; aei++) { if (DATA.employees[aei].id === al.changed_by) { aemp = DATA.employees[aei]; break; } }
         var arow = {};
         var alKeys = Object.keys(al);
         for (var ak = 0; ak < alKeys.length; ak++) arow[alKeys[ak]] = al[alKeys[ak]];
