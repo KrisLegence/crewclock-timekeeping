@@ -1,0 +1,31 @@
+{
+  "name": "timekeeping-system",
+  "version": "1.0.0",
+  "description": "SOX-compliant Timekeeping System for construction firms with Sage 300 CRE integration",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=18.x"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "demo": "node demo.js",
+    "dev": "concurrently \"node src/server.js\" \"cd client && npx react-scripts start\"",
+    "dev:server": "node src/server.js",
+    "dev:client": "cd client && npx react-scripts start",
+    "migrate": "node src/migrations/run.js",
+    "seed": "node src/migrations/seed.js",
+    "setup": "npm install && cd client && npm install && cd .. && npm run migrate && npm run seed",
+    "vercel-build": "echo 'No build step needed'"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "pg": "^8.11.3",
+    "cors": "^2.8.5",
+    "multer": "^1.4.5-lts.1",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "dotenv": "^16.3.1",
+    "uuid": "^9.0.0",
+    "concurrently": "^8.2.2"
+  }
+}

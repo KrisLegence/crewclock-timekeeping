@@ -1,0 +1,11 @@
+node_modules/
+.env
+.env.local
+.vercel/
+uploads/proof-photos/*.jpg
+uploads/proof-photos/*.png
+uploads/proof-photos/*.webp
+*.log
+.DS_Store
+Thumbs.db
+client/node_modules/

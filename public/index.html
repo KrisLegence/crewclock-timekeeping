@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>CrewClock — Timekeeping System</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--blue-600:#2563eb;--blue-700:#1d4ed8;--green-600:#16a34a;--red-500:#ef4444;--amber-500:#f59e0b;--gray-50:#f9fafb;--gray-100:#f3f4f6;--gray-200:#e5e7eb;--gray-300:#d1d5db;--gray-500:#6b7280;--gray-700:#374151;--gray-900:#111827;--radius:8px;--shadow:0 1px 3px rgba(0,0,0,.1),0 1px 2px rgba(0,0,0,.06);--shadow-lg:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px rgba(0,0,0,.05)}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--gray-50);color:var(--gray-900);line-height:1.5}
+.app{display:flex;min-height:100vh}
+.sidebar{width:240px;background:var(--gray-900);color:#fff;padding:24px 0;display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100}
+.sidebar .logo{padding:0 20px 24px;font-size:20px;font-weight:700;letter-spacing:-.5px;border-bottom:1px solid rgba(255,255,255,.1)}
+.sidebar .logo span{color:var(--blue-600)}
+.sidebar nav{flex:1;padding:16px 0}
+.sidebar a{display:flex;align-items:center;gap:10px;padding:10px 20px;color:var(--gray-300);text-decoration:none;font-size:14px;font-weight:500;transition:all .15s;cursor:pointer}
+.sidebar a:hover,.sidebar a.active{background:rgba(255,255,255,.08);color:#fff}
+.sidebar a.active{border-left:3px solid var(--blue-600)}
+.main{flex:1;padding:32px;max-width:1200px;margin-left:240px}
+.page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+.page-header h1{font-size:24px;font-weight:700}
+.page-header .subtitle{color:var(--gray-500);font-size:14px;margin-top:2px}
+.card{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);padding:24px;margin-bottom:20px}
+.card h2{font-size:16px;font-weight:600;margin-bottom:16px}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+.stat-card{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;text-align:center}
+.stat-card .value{font-size:32px;font-weight:700;color:var(--blue-600)}
+.stat-card .label{font-size:13px;color:var(--gray-500);margin-top:4px}
+input,select,textarea{width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:var(--radius);font-size:14px;font-family:inherit;transition:border-color .15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue-600);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+label{display:block;font-size:13px;font-weight:600;margin-bottom:4px;color:var(--gray-700)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.form-group{margin-bottom:16px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border:none;border-radius:var(--radius);font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit}
+.btn-primary{background:var(--blue-600);color:#fff}.btn-primary:hover{background:var(--blue-700)}
+.btn-success{background:var(--green-600);color:#fff}.btn-success:hover{background:#15803d}
+.btn-danger{background:var(--red-500);color:#fff}.btn-danger:hover{background:#dc2626}
+.btn-outline{background:#fff;color:var(--gray-700);border:1px solid var(--gray-300)}.btn-outline:hover{background:var(--gray-50)}
+.btn-sm{padding:4px 10px;font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;padding:10px 12px;background:var(--gray-50);border-bottom:2px solid var(--gray-200);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500)}
+td{padding:10px 12px;border-bottom:1px solid var(--gray-100)}
+tr:hover td{background:var(--gray-50)}
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:12px;font-weight:600}
+.badge-pending{background:#fef3c7;color:#92400e}
+.badge-approved{background:#d1fae5;color:#065f46}
+.badge-flagged{background:#fee2e2;color:#991b1b}
+.crew-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin:16px 0}
+.crew-card{border:2px solid var(--gray-200);border-radius:var(--radius);padding:16px;text-align:center;cursor:pointer;transition:all .15s;user-select:none}
+.crew-card:hover{border-color:var(--blue-600)}
+.crew-card.selected{border-color:var(--blue-600);background:#eff6ff}
+.crew-card .name{font-weight:600;font-size:15px}
+.crew-card .emp-num{font-size:12px;color:var(--gray-500)}
+.crew-card .checkmark{width:24px;height:24px;border-radius:50%;border:2px solid var(--gray-300);margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-size:14px}
+.crew-card.selected .checkmark{background:var(--blue-600);border-color:var(--blue-600);color:#fff}
+.flag-card{border-left:4px solid var(--red-500);background:#fff;border-radius:0 var(--radius) var(--radius) 0;box-shadow:var(--shadow);padding:16px 20px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+.flag-card .flag-type{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--red-500);font-weight:700}
+.flag-card .flag-msg{font-size:14px;margin-top:4px}
+.photo-upload{border:2px dashed var(--gray-300);border-radius:var(--radius);padding:32px;text-align:center;cursor:pointer;transition:all .15s}
+.photo-upload:hover{border-color:var(--blue-600);background:#eff6ff}
+.photo-upload img{max-width:300px;border-radius:var(--radius);margin-top:12px}
+.toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;background:var(--green-600);color:#fff;border-radius:var(--radius);box-shadow:var(--shadow-lg);font-weight:600;font-size:14px;z-index:2000;animation:slideIn .3s ease}
+@keyframes slideIn{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+@media(max-width:768px){.sidebar{width:60px}.sidebar .logo span,.sidebar a span{display:none}.main{margin-left:60px;padding:16px}.form-row{grid-template-columns:1fr}.crew-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="sidebar">
+  <div class="logo">Crew<span>Clock</span></div>
+  <nav>
+    <a data-page="dashboard" class="active" onclick="showPage('dashboard')"><span>Dashboard</span></a>
+    <a data-page="huddle" onclick="showPage('huddle')"><span>Crew Huddle</span></a>
+    <a data-page="entries" onclick="showPage('entries')"><span>Time Entries</span></a>
+    <a data-page="manual" onclick="showPage('manual')"><span>Manual Entry</span></a>
+    <a data-page="validation" onclick="showPage('validation')"><span>Review &amp; Fix</span></a>
+    <a data-page="export" onclick="showPage('export')"><span>Sage 300 Export</span></a>
+    <a data-page="audit" onclick="showPage('audit')"><span>Audit Trail</span></a>
+  </nav>
+  <div style="padding:0 20px;font-size:11px;color:rgba(255,255,255,.3)">v1.0 &middot; SOX Compliant</div>
+</aside>
+<main class="main" id="main-content"></main>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+const API='';
+let currentPage='dashboard',huddleStep=1,selectedCrew=new Set(),photoAttached=false;
+
+function showToast(msg,isError){
+  const c=document.getElementById('toast-container');
+  c.innerHTML=`<div class="toast" style="background:${isError?'var(--red-500)':'var(--green-600)'}">${msg}</div>`;
+  setTimeout(()=>c.innerHTML='',3000);
+}
+
+function showPage(page){
+  currentPage=page;
+  document.querySelectorAll('.sidebar a').forEach(a=>a.classList.toggle('active',a.dataset.page===page));
+  const main=document.getElementById('main-content');
+  switch(page){
+    case 'dashboard':renderDashboard(main);break;
+    case 'huddle':huddleStep=1;selectedCrew.clear();renderHuddle(main);break;
+    case 'entries':renderEntries(main);break;
+    case 'manual':renderManual(main);break;
+    case 'validation':renderValidation(main);break;
+    case 'export':renderExport(main);break;
+    case 'audit':renderAudit(main);break;
+  }
+}
+
+async function api(path,opts){const res=await fetch(API+path,opts);return res.json();}
+
+async function renderDashboard(el){
+  const[all,pending,flags,emps]=await Promise.all([
+    api('/api/time-entries'),api('/api/time-entries?status=pending'),
+    api('/api/validation/flags'),api('/api/employees?active=true'),
+  ]);
+  const today=new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  el.innerHTML=`
+    <div class="page-header"><div><h1>Dashboard</h1><div class="subtitle">Today: ${today}</div></div></div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="value">${emps.length}</div><div class="label">Active Employees</div></div>
+      <div class="stat-card"><div class="value">${all.length}</div><div class="label">Total Entries</div></div>
+      <div class="stat-card"><div class="value" style="color:var(--amber-500)">${pending.length}</div><div class="label">Pending Review</div></div>
+      <div class="stat-card"><div class="value" style="color:var(--red-500)">${flags.length}</div><div class="label">Validation Flags</div></div>
+    </div>
+    <div class="card"><h2>Quick Actions</h2>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="showPage('huddle')">Start Crew Huddle</button>
+        <button class="btn btn-outline" onclick="showPage('manual')">Manual Entry</button>
+        <button class="btn btn-danger" onclick="showPage('validation')">Review Flags</button>
+        <button class="btn btn-success" onclick="showPage('export')">Export to Sage 300</button>
+      </div>
+    </div>`;
+}
+
+async function renderHuddle(el){
+  const emps=await api('/api/employees?active=true');
+  const ccs=await api('/api/cost-codes?active=true');
+  const workers=emps.filter(e=>e.role!=='admin');
+  const crews=[...new Set(workers.map(e=>e.crew_id).filter(Boolean))];
+  const today=new Date().toISOString().split('T')[0];
+  const locs=[{v:'',l:'No Per Diem'},{v:'TX',l:'Texas (Local) — $69'},{v:'TX_TRAVEL',l:'Texas (Travel) — $235'},{v:'ABQ',l:'Albuquerque, NM — $232'},{v:'DEFAULT',l:'Standard GSA — $166'}];
+
+  el.innerHTML=`
+    <div class="page-header">
+      <div><h1>Crew Huddle Entry</h1><div class="subtitle">Select your crew, assign a cost code, snap a proof photo.</div></div>
+      <div style="display:flex;gap:8px">${[1,2,3].map(s=>`<div style="width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;background:${huddleStep>=s?'var(--blue-600)':'var(--gray-200)'};color:${huddleStep>=s?'#fff':'var(--gray-500)'}">${s}</div>`).join('')}</div>
+    </div>
+    <div id="huddle-step1" class="${huddleStep!==1?'hidden':''}">
+      <div class="card">
+        <h2>Step 1 — Select Crew Members (<span id="sel-count">${selectedCrew.size}</span> selected)</h2>
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          ${crews.map(c=>`<button class="btn btn-outline btn-sm" onclick="toggleCrew(${c})">Crew ${c}: Toggle All</button>`).join('')}
+        </div>
+        <div class="crew-grid">
+          ${workers.map(e=>`
+            <div class="crew-card ${selectedCrew.has(e.id)?'selected':''}" onclick="toggleEmp(${e.id})" id="crew-${e.id}">
+              <div class="checkmark">${selectedCrew.has(e.id)?'✓':''}</div>
+              <div class="name">${e.first_name} ${e.last_name}</div>
+              <div class="emp-num">${e.employee_number}</div>
+              <div class="emp-num">${e.role==='foreman'?'Foreman':'Crew '+(e.crew_id||'—')}</div>
+            </div>
+          `).join('')}
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:16px">
+          <button class="btn btn-primary" id="step1-next" onclick="huddleNext(2)" ${selectedCrew.size===0?'disabled':''}>Next: Assign Work →</button>
+        </div>
+      </div>
+    </div>
+    <div id="huddle-step2" class="${huddleStep!==2?'hidden':''}">
+      <div class="card">
+        <h2>Step 2 — Work Assignment for <span id="sel-count2">${selectedCrew.size}</span> crew members</h2>
+        <div class="form-row">
+          <div class="form-group"><label>Work Date</label><input type="date" id="h-date" value="${today}"/></div>
+          <div class="form-group"><label>Hours Worked</label><input type="number" id="h-hours" value="8" min="0" max="24" step="0.5"/></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Cost Code</label><select id="h-cc"><option value="">Select cost code...</option>${ccs.map(c=>`<option value="${c.id}">${c.code} — ${c.description} (${c.job_number})</option>`).join('')}</select></div>
+          <div class="form-group"><label>Per Diem Location</label><select id="h-loc">${locs.map(l=>`<option value="${l.v}">${l.l}</option>`).join('')}</select></div>
+        </div>
+        <div class="form-group"><label>Notes (optional)</label><textarea id="h-notes" rows="2" placeholder="Any notes about today's work..."></textarea></div>
+        <div style="display:flex;justify-content:space-between;margin-top:16px">
+          <button class="btn btn-outline" onclick="huddleNext(1)">← Back</button>
+          <button class="btn btn-primary" onclick="huddleNext(3)">Next: Proof Photo →</button>
+        </div>
+      </div>
+    </div>
+    <div id="huddle-step3" class="${huddleStep!==3?'hidden':''}">
+      <div class="card">
+        <h2>Step 3 — Proof of Presence Photo</h2>
+        <p style="color:var(--gray-500);margin-bottom:16px;font-size:14px">Take a group photo of the crew at the job site.</p>
+        <div class="photo-upload" onclick="document.getElementById('h-photo').click()">
+          <input type="file" id="h-photo" accept="image/*" capture="environment" style="display:none" onchange="handleHuddlePhoto(this)"/>
+          <div id="photo-placeholder"><div style="font-weight:600;color:var(--gray-700)">Tap to take photo or upload</div><div style="font-size:12px;color:var(--gray-500)">JPEG, PNG, or WebP up to 10MB</div></div>
+          <img id="photo-preview" style="display:none;max-width:300px;border-radius:8px;margin-top:12px"/>
+        </div>
+        <div class="card" style="margin-top:20px;background:var(--gray-50)">
+          <h2>Submission Summary</h2>
+          <table><tbody>
+            <tr><td style="font-weight:600;width:150px">Crew Members</td><td id="sum-crew">${selectedCrew.size} selected</td></tr>
+            <tr><td style="font-weight:600">Date</td><td id="sum-date">${today}</td></tr>
+            <tr><td style="font-weight:600">Hours</td><td id="sum-hours">8h</td></tr>
+            <tr><td style="font-weight:600">Cost Code</td><td id="sum-cc">—</td></tr>
+            <tr><td style="font-weight:600">Per Diem</td><td id="sum-pd">None</td></tr>
+            <tr><td style="font-weight:600">Photo</td><td id="sum-photo">No photo</td></tr>
+          </tbody></table>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:20px">
+          <button class="btn btn-outline" onclick="huddleNext(2)">← Back</button>
+          <button class="btn btn-success" style="font-size:16px;padding:12px 32px" onclick="submitHuddle()">Submit ${selectedCrew.size} Entries</button>
+        </div>
+      </div>
+    </div>`;
+  window._huddleEmps=workers;window._huddleCCs=ccs;window._huddleLocs=locs;
+}
+
+window.toggleEmp=function(id){
+  selectedCrew.has(id)?selectedCrew.delete(id):selectedCrew.add(id);
+  const card=document.getElementById('crew-'+id);
+  if(card){card.classList.toggle('selected',selectedCrew.has(id));card.querySelector('.checkmark').textContent=selectedCrew.has(id)?'✓':'';}
+  document.querySelectorAll('#sel-count,#sel-count2').forEach(s=>s.textContent=selectedCrew.size);
+  const btn=document.getElementById('step1-next');if(btn)btn.disabled=selectedCrew.size===0;
+};
+
+window.toggleCrew=function(crewId){
+  const members=(window._huddleEmps||[]).filter(e=>e.crew_id===crewId);
+  const allSel=members.every(e=>selectedCrew.has(e.id));
+  members.forEach(e=>allSel?selectedCrew.delete(e.id):selectedCrew.add(e.id));
+  members.forEach(e=>{const card=document.getElementById('crew-'+e.id);if(card){card.classList.toggle('selected',selectedCrew.has(e.id));card.querySelector('.checkmark').textContent=selectedCrew.has(e.id)?'✓':'';}});
+  document.querySelectorAll('#sel-count,#sel-count2').forEach(s=>s.textContent=selectedCrew.size);
+  const btn=document.getElementById('step1-next');if(btn)btn.disabled=selectedCrew.size===0;
+};
+
+window.huddleNext=function(step){
+  huddleStep=step;
+  [1,2,3].forEach(s=>{const el=document.getElementById('huddle-step'+s);if(el)el.classList.toggle('hidden',s!==step);});
+  if(step===3){
+    const cc=(window._huddleCCs||[]).find(c=>c.id==(document.getElementById('h-cc')||{}).value);
+    const loc=(window._huddleLocs||[]).find(l=>l.v===(document.getElementById('h-loc')||{}).value);
+    const g=id=>document.getElementById(id);
+    if(g('sum-crew'))g('sum-crew').textContent=selectedCrew.size+' selected';
+    if(g('sum-date'))g('sum-date').textContent=(document.getElementById('h-date')||{}).value||'';
+    if(g('sum-hours'))g('sum-hours').textContent=((document.getElementById('h-hours')||{}).value||'8')+'h';
+    if(g('sum-cc'))g('sum-cc').textContent=cc?cc.code+' — '+cc.description:'—';
+    if(g('sum-pd'))g('sum-pd').textContent=loc?loc.l:'None';
+    if(g('sum-photo'))g('sum-photo').textContent=photoAttached?'✓ Attached':'No photo';
+  }
+  renderHuddle(document.getElementById('main-content'));
+};
+
+window.handleHuddlePhoto=function(input){
+  if(input.files&&input.files[0]){photoAttached=true;const reader=new FileReader();reader.onload=function(e){const img=document.getElementById('photo-preview');if(img){img.src=e.target.result;img.style.display='block';}const ph=document.getElementById('photo-placeholder');if(ph)ph.style.display='none';};reader.readAsDataURL(input.files[0]);}
+};
+
+window.submitHuddle=async function(){
+  const body={employee_ids:Array.from(selectedCrew),cost_code_id:parseInt((document.getElementById('h-cc')||{}).value),work_date:(document.getElementById('h-date')||{}).value,total_hours:parseFloat((document.getElementById('h-hours')||{}).value||'8'),per_diem_location:(document.getElementById('h-loc')||{}).value||null,foreman_id:1,notes:(document.getElementById('h-notes')||{}).value||null};
+  if(!body.cost_code_id||selectedCrew.size===0){showToast('Select crew and cost code',true);return;}
+  const result=await api('/api/time-entries/huddle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  showToast(result.created+' entries submitted successfully');
+  selectedCrew.clear();photoAttached=false;huddleStep=1;showPage('huddle');
+};
+
+async function renderEntries(el){
+  const entries=await api('/api/time-entries');
+  const sb=s=>({pending:'badge-pending',approved:'badge-approved',flagged:'badge-flagged',rejected:'badge-flagged'}[s]||'');
+  el.innerHTML=`
+    <div class="page-header"><div><h1>Time Entries</h1><div class="subtitle">${entries.length} entries</div></div></div>
+    <div class="card" style="padding:0;overflow:auto">
+      <table><thead><tr><th>Employee</th><th>Date</th><th>Cost Code</th><th>Reg</th><th>OT</th><th>DT</th><th>Per Diem</th><th>Source</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>${entries.length===0?'<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--gray-500)">No entries</td></tr>':entries.map(e=>'<tr><td style="font-weight:600">'+e.first_name+' '+e.last_name+'<br><span style="font-size:11px;color:var(--gray-500)">'+e.employee_number+'</span></td><td>'+new Date(e.work_date).toLocaleDateString()+'</td><td><span style="font-family:monospace">'+(e.cost_code_value||'')+'</span><br><span style="font-size:11px;color:var(--gray-500)">'+(e.job_number||'')+'</span></td><td>'+Number(e.hours_regular).toFixed(1)+'</td><td>'+(Number(e.hours_overtime)>0?'<strong style="color:var(--amber-500)">'+Number(e.hours_overtime).toFixed(1)+'</strong>':'—')+'</td><td>'+(Number(e.hours_double)>0?'<strong style="color:var(--red-500)">'+Number(e.hours_double).toFixed(1)+'</strong>':'—')+'</td><td>'+(Number(e.per_diem)>0?'$'+Number(e.per_diem).toFixed(0):'—')+'</td><td><span class="badge" style="background:#e0e7ff;color:#3730a3">'+e.source+'</span></td><td><span class="badge '+sb(e.status)+'">'+e.status+'</span></td><td>'+(e.status==='pending'?'<button class="btn btn-success btn-sm" onclick="approveEntry('+e.id+')">Approve</button>':'')+'</td></tr>').join('')}</tbody></table>
+    </div>`;
+}
+
+window.approveEntry=async function(id){
+  await api('/api/time-entries/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'approved',reason_code:'supervisor_override',approved_by:10,changed_by:10})});
+  showToast('Entry approved');renderEntries(document.getElementById('main-content'));
+};
+
+async function renderManual(el){
+  const emps=await api('/api/employees?active=true');
+  const ccs=await api('/api/cost-codes?active=true');
+  const today=new Date().toISOString().split('T')[0];
+  const reasons=[{v:'',l:'Select reason...'},{v:'forgot_to_punch',l:'Forgot to punch in/out'},{v:'wrong_cost_code',l:'Wrong cost code correction'},{v:'equipment_failure',l:'Equipment failure (kiosk down)'},{v:'supervisor_override',l:'Supervisor override'},{v:'schedule_change',l:'Schedule change'},{v:'other',l:'Other (must explain)'}];
+  const locs=[{v:'',l:'No Per Diem'},{v:'TX',l:'Texas (Local) — $69'},{v:'TX_TRAVEL',l:'Texas (Travel) — $235'},{v:'ABQ',l:'Albuquerque, NM — $232'},{v:'DEFAULT',l:'Standard GSA — $166'}];
+  el.innerHTML=`
+    <div class="page-header"><div><h1>Manual Time Entry</h1><div class="subtitle">Admin entry — reason code required for SOX compliance.</div></div></div>
+    <form id="manual-form" onsubmit="submitManual(event)">
+      <div class="card"><h2>Entry Details</h2>
+        <div class="form-row">
+          <div class="form-group"><label>Employee *</label><select id="m-emp" required><option value="">Select employee...</option>${emps.map(e=>'<option value="'+e.id+'">'+e.last_name+', '+e.first_name+' ('+e.employee_number+')</option>').join('')}</select></div>
+          <div class="form-group"><label>Cost Code *</label><select id="m-cc" required><option value="">Select cost code...</option>${ccs.map(c=>'<option value="'+c.id+'">'+c.code+' — '+c.description+'</option>').join('')}</select></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Work Date *</label><input type="date" id="m-date" value="${today}" required/></div>
+          <div class="form-group"><label>Total Hours *</label><input type="number" id="m-hours" value="8" min="0.5" max="24" step="0.5" required/></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Per Diem Location</label><select id="m-loc">${locs.map(l=>'<option value="'+l.v+'">'+l.l+'</option>').join('')}</select></div>
+          <div class="form-group"><label>Notes</label><input id="m-notes" placeholder="Optional notes..."/></div>
+        </div>
+      </div>
+      <div class="card" style="border-left:4px solid var(--amber-500)">
+        <h2 style="color:var(--amber-500)">⚠ Reason for Manual Entry (Required)</h2>
+        <p style="font-size:13px;color:var(--gray-500);margin-bottom:16px">SOX compliance requires a documented reason for any manually created or modified time entry.</p>
+        <div class="form-group"><label>Reason Code *</label><select id="m-reason" required onchange="document.getElementById('m-reason-note-wrap').style.display=this.value==='other'?'block':'none'">${reasons.map(r=>'<option value="'+r.v+'">'+r.l+'</option>').join('')}</select></div>
+        <div class="form-group" id="m-reason-note-wrap" style="display:none"><label>Explanation *</label><textarea id="m-reason-note" rows="3" placeholder="Explain why this manual entry is needed..."></textarea></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:12px">
+        <button type="button" class="btn btn-outline" onclick="showPage('manual')">Clear</button>
+        <button type="submit" class="btn btn-primary">Save Entry</button>
+      </div>
+    </form>`;
+}
+
+window.submitManual=async function(e){
+  e.preventDefault();
+  const reason=document.getElementById('m-reason').value;
+  if(!reason){showToast('Reason code is REQUIRED for manual entries',true);return;}
+  if(reason==='other'){const note=(document.getElementById('m-reason-note').value||'').trim();if(note.length<5){showToast('Explanation required (min 5 chars) for "Other"',true);return;}}
+  const body={employee_id:parseInt(document.getElementById('m-emp').value),cost_code_id:parseInt(document.getElementById('m-cc').value),work_date:document.getElementById('m-date').value,total_hours:parseFloat(document.getElementById('m-hours').value),per_diem_location:document.getElementById('m-loc').value||null,notes:document.getElementById('m-notes').value||null,reason_code:reason,reason_note:document.getElementById('m-reason-note')?.value||null,source:'manual',created_by:15};
+  const result=await api('/api/time-entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(result.error){showToast('Error: '+result.error,true);return;}
+  showToast('Entry saved successfully');showPage('manual');
+};
+
+async function renderValidation(el){
+  const flags=await api('/api/validation/flags');
+  const fl={excessive_hours:'Excessive Hours (16+)',missing_cost_code:'Missing/Inactive Cost Code',duplicate_entry:'Duplicate Entry',missing_punch:'Missing Clock-In'};
+  const fc={excessive_hours:'#dc2626',missing_cost_code:'#d97706',duplicate_entry:'#7c3aed',missing_punch:'#2563eb'};
+  const grouped={};flags.forEach(f=>{if(!grouped[f.flag_type])grouped[f.flag_type]=[];grouped[f.flag_type].push(f);});
+  el.innerHTML=`
+    <div class="page-header"><div><h1>Review &amp; Fix</h1><div class="subtitle">Validation engine — flags the 10% errors for your review.</div></div>
+      <button class="btn btn-primary" onclick="runValidation()">Run Validation Scan</button></div>
+    <div id="scan-result"></div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="value" style="color:var(--red-500)">${flags.length}</div><div class="label">Open Flags</div></div>
+      ${Object.entries(grouped).map(([t,items])=>'<div class="stat-card"><div class="value" style="color:'+(fc[t]||'var(--gray-700)')+'">'+items.length+'</div><div class="label">'+(fl[t]||t)+'</div></div>').join('')}
+    </div>
+    ${flags.length===0?'<div class="card" style="text-align:center;padding:48px;color:var(--gray-500)"><div style="font-size:18px;font-weight:600;color:var(--green-600)">All Clear</div><div>No unresolved flags. Run a scan to check for issues.</div></div>':''}
+    ${Object.entries(grouped).map(([t,items])=>'<div style="margin-bottom:24px"><h3 style="font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:'+(fc[t]||'var(--gray-700)')+';margin-bottom:12px">'+(fl[t]||t)+' ('+items.length+')</h3>'+items.map(f=>'<div class="flag-card"><div><div class="flag-type">'+f.flag_type.replace(/_/g,' ')+'</div><div class="flag-msg">'+f.flag_message+'</div><div style="font-size:12px;color:var(--gray-500);margin-top:4px">'+(f.first_name||'')+' '+(f.last_name||'')+' · '+(f.work_date?new Date(f.work_date).toLocaleDateString():'')+' · '+(f.cost_code_value||'')+'</div></div><div style="display:flex;gap:8px"><button class="btn btn-outline btn-sm" onclick="showPage(\'entries\')">View</button><button class="btn btn-success btn-sm" onclick="resolveFlag('+f.id+')">Resolve</button></div></div>').join('')+'</div>').join('')}`;
+}
+
+window.runValidation=async function(){
+  const result=await api('/api/validation/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+  document.getElementById('scan-result').innerHTML='<div class="card" style="background:#f0fdf4;border-left:4px solid var(--green-600)">Scan complete: '+result.scanned+' potential issues, '+result.new_flags+' new flags.</div>';
+  setTimeout(()=>renderValidation(document.getElementById('main-content')),500);
+};
+
+window.resolveFlag=async function(id){
+  await api('/api/validation/flags/'+id+'/resolve',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({resolved_by:10})});
+  showToast('Flag resolved');renderValidation(document.getElementById('main-content'));
+};
+
+function renderExport(el){
+  el.innerHTML=`
+    <div class="page-header"><div><h1>Sage 300 CRE Export</h1><div class="subtitle">Generate .PRT (Payroll Transaction) file for import into Sage 300 CRE.</div></div></div>
+    <div class="card"><h2>Select Pay Period</h2>
+      <div class="form-row">
+        <div class="form-group"><label>Start Date</label><input type="date" id="e-start"/></div>
+        <div class="form-group"><label>End Date</label><input type="date" id="e-end"/></div>
+      </div>
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-outline" onclick="previewExport()">Preview Export</button>
+        <button class="btn btn-success" onclick="downloadExport()">Download .PRT File</button>
+      </div>
+    </div>
+    <div id="export-preview"></div>
+    <div class="card" style="background:var(--gray-50);margin-top:8px"><h2>Sage 300 CRE Import Instructions</h2>
+      <ol style="padding-left:20px;font-size:14px;color:var(--gray-700);line-height:1.8">
+        <li>Download the .PRT file.</li><li>Open Sage 300 CRE → Payroll → Transactions → Import.</li>
+        <li>Select "CSV/Delimited" format.</li><li>Browse to the .PRT file.</li>
+        <li>Map columns (auto-maps with default Sage 300 field names).</li><li>Review and click "Process."</li>
+      </ol>
+    </div>`;
+}
+
+window.previewExport=async function(){
+  const s=document.getElementById('e-start').value,e=document.getElementById('e-end').value;
+  if(!s||!e){showToast('Select date range',true);return;}
+  const data=await api('/api/export/sage300/preview?start_date='+s+'&end_date='+e);
+  const ec={REG:['#d1fae5','#065f46'],OT:['#fef3c7','#92400e'],DT:['#fee2e2','#991b1b'],PERD:['#e0e7ff','#3730a3']};
+  document.getElementById('export-preview').innerHTML='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h2>Preview: '+data.filename+'</h2><span class="badge badge-approved">'+data.row_count+' rows</span></div>'+(data.row_count===0?'<div style="text-align:center;padding:32px;color:var(--gray-500)">No approved entries. Approve entries first.</div>':'<div style="overflow-x:auto"><table><thead><tr><th>Employee#</th><th>Date</th><th>Job#</th><th>Cost Code</th><th>Earning</th><th>Hours</th><th>Amount</th></tr></thead><tbody>'+data.rows.map(r=>'<tr><td style="font-family:monospace">'+(r['Employee#']||'')+'</td><td>'+(r['Trans Date']||'')+'</td><td>'+(r['Job#']||'')+'</td><td style="font-family:monospace">'+(r['Cost Code']||'')+'</td><td><span class="badge" style="background:'+(ec[r['Earning Code']]||['#eee','#333'])[0]+';color:'+(ec[r['Earning Code']]||['#eee','#333'])[1]+'">'+(r['Earning Code']||'')+'</span></td><td>'+(r['Hours']||'')+'</td><td style="font-weight:600">$'+parseFloat(r['Amount']||0).toFixed(2)+'</td></tr>').join('')+'</tbody></table></div>')+'</div>';
+};
+
+window.downloadExport=function(){
+  const s=document.getElementById('e-start').value,e=document.getElementById('e-end').value;
+  if(!s||!e){showToast('Select date range',true);return;}
+  window.open('/api/export/sage300?start_date='+s+'&end_date='+e,'_blank');
+};
+
+async function renderAudit(el){
+  const logs=await api('/api/audit-logs?limit=100');
+  el.innerHTML=`
+    <div class="page-header"><div><h1>SOX Audit Trail</h1><div class="subtitle">Every UPDATE and DELETE recorded with before/after state.</div></div></div>
+    <div class="card" style="padding:0"><table><thead><tr><th>Timestamp</th><th>Table</th><th>Record</th><th>Action</th><th>Changed By</th><th>Reason</th><th>Details</th></tr></thead>
+    <tbody>${logs.length===0?'<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--gray-500)">No audit entries yet. Approve or edit a time entry to see the audit trail.</td></tr>':logs.map(l=>'<tr><td style="font-size:12px;font-family:monospace">'+new Date(l.created_at).toLocaleString()+'</td><td><span class="badge" style="background:#e0e7ff;color:#3730a3">'+l.table_name+'</span></td><td>#'+l.record_id+'</td><td><span class="badge '+(l.action==='DELETE'?'badge-flagged':'badge-pending')+'">'+l.action+'</span></td><td>'+(l.first_name?l.first_name+' '+l.last_name:'User #'+l.changed_by)+'</td><td>'+(l.change_reason||'—')+'</td><td><button class="btn btn-outline btn-sm" onclick="toggleAuditDetail('+l.id+')">Show</button></td></tr><tr id="audit-detail-'+l.id+'" style="display:none"><td colspan="7" style="background:var(--gray-50);padding:16px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:16px"><div><strong style="font-size:12px;color:var(--red-500)">BEFORE</strong><pre style="background:#fef2f2;padding:12px;border-radius:6px;font-size:12px;overflow:auto;max-height:300px;margin-top:4px">'+(l.before_state?JSON.stringify(l.before_state,null,2):'N/A')+'</pre></div><div><strong style="font-size:12px;color:var(--green-600)">AFTER</strong><pre style="background:#f0fdf4;padding:12px;border-radius:6px;font-size:12px;overflow:auto;max-height:300px;margin-top:4px">'+(l.after_state?JSON.stringify(l.after_state,null,2):'N/A (deleted)')+'</pre></div></div></td></tr>').join('')}</tbody></table></div>`;
+}
+
+window.toggleAuditDetail=function(id){const el=document.getElementById('audit-detail-'+id);if(el)el.style.display=el.style.display==='none'?'':'none';};
+
+showPage('dashboard');
+</script>
+</body>
+</html>
