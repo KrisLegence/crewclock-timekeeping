@@ -414,6 +414,35 @@ window.approveEntry=function(id){
   });
 };
 
+function toLocalDatetime(iso){
+  if(!iso)return '';
+  var d=new Date(iso);
+  var y=d.getFullYear(),mo=String(d.getMonth()+1).padStart(2,'0'),da=String(d.getDate()).padStart(2,'0');
+  var h=String(d.getHours()).padStart(2,'0'),mi=String(d.getMinutes()).padStart(2,'0');
+  return y+'-'+mo+'-'+da+'T'+h+':'+mi;
+}
+
+function recalcEditHours(){
+  var ciVal=document.getElementById('edit-clockin').value;
+  var coVal=document.getElementById('edit-clockout').value;
+  var preview=document.getElementById('edit-hours-preview');
+  if(!preview)return;
+  if(ciVal&&coVal){
+    var diff=new Date(coVal).getTime()-new Date(ciVal).getTime();
+    var total=Math.round((diff/3600000)*100)/100;
+    if(total<0){preview.innerHTML='<span style="color:var(--red-500);font-weight:600">Clock out is before clock in</span>';return;}
+    var reg=Math.min(total,8),ot=Math.min(Math.max(total-8,0),4),dt=Math.max(total-12,0);
+    preview.innerHTML='<strong>'+total.toFixed(1)+'h total</strong> &mdash; '+
+      reg.toFixed(1)+'h regular'+
+      (ot>0?' + <span style="color:var(--amber-500);font-weight:600">'+ot.toFixed(1)+'h OT</span>':'')+
+      (dt>0?' + <span style="color:var(--red-500);font-weight:600">'+dt.toFixed(1)+'h DT</span>':'');
+  }else if(ciVal&&!coVal){
+    preview.innerHTML='<span style="color:var(--green-600)">Still on clock — hours will calculate on punch out</span>';
+  }else{
+    preview.innerHTML='<span style="color:var(--gray-400)">Set clock in/out to calculate hours</span>';
+  }
+}
+
 window.openEditModal=function(entryId){
   var entry=null;
   var entries=window._allEntries||[];
@@ -422,7 +451,6 @@ window.openEditModal=function(entryId){
   var ccs=window._costCodes||[];
   var locs=[{v:'',l:'No Per Diem'},{v:'TX',l:'Texas (Local) — $69'},{v:'TX_TRAVEL',l:'Texas (Travel) — $235'},{v:'ABQ',l:'Albuquerque, NM — $232'},{v:'DEFAULT',l:'Standard GSA — $166'}];
   var reasons=[{v:'',l:'Select reason...'},{v:'wrong_cost_code',l:'Wrong cost code correction'},{v:'forgot_to_punch',l:'Forgot to punch in/out'},{v:'supervisor_override',l:'Supervisor override'},{v:'schedule_change',l:'Schedule change'},{v:'other',l:'Other (must explain)'}];
-  var total=Number(entry.hours_regular)+Number(entry.hours_overtime)+Number(entry.hours_double);
 
   var container=document.getElementById('edit-modal-container');
   container.innerHTML=
@@ -433,26 +461,39 @@ window.openEditModal=function(entryId){
           '<button class="close-btn" onclick="closeEditModal()">&times;</button>'+
         '</div>'+
         '<div class="modal-body">'+
-          '<div style="background:var(--gray-50);border-radius:var(--radius);padding:16px;margin-bottom:20px">'+
-            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px">'+
-              '<div><strong>Employee</strong><div class="read-only-field">'+entry.first_name+' '+entry.last_name+' ('+entry.employee_number+')</div></div>'+
-              '<div><strong>Date</strong><div class="read-only-field">'+new Date(entry.work_date).toLocaleDateString()+'</div></div>'+
-              '<div><strong>Clock In</strong><div class="read-only-field">'+(entry.clock_in?fmtTime(entry.clock_in):'—')+'</div></div>'+
-              '<div><strong>Clock Out / Hours</strong><div class="read-only-field">'+(entry.clock_out?fmtTime(entry.clock_out)+' ('+total.toFixed(1)+'h)':'On clock')+'</div></div>'+
+          '<div style="background:var(--gray-50);border-radius:var(--radius);padding:12px 16px;margin-bottom:20px">'+
+            '<strong>'+entry.first_name+' '+entry.last_name+'</strong>'+
+            '<span style="color:var(--gray-500);margin-left:8px">'+entry.employee_number+'</span>'+
+          '</div>'+
+          '<div class="form-group">'+
+            '<label>Work Date</label>'+
+            '<input type="date" id="edit-date" value="'+(entry.work_date||'')+'"/>'+
+          '</div>'+
+          '<div class="form-row">'+
+            '<div class="form-group">'+
+              '<label>Clock In</label>'+
+              '<input type="datetime-local" id="edit-clockin" value="'+toLocalDatetime(entry.clock_in)+'" onchange="recalcEditHours()"/>'+
+            '</div>'+
+            '<div class="form-group">'+
+              '<label>Clock Out</label>'+
+              '<input type="datetime-local" id="edit-clockout" value="'+toLocalDatetime(entry.clock_out)+'" onchange="recalcEditHours()"/>'+
             '</div>'+
           '</div>'+
-          '<div class="form-group">'+
-            '<label>Cost Code *</label>'+
-            '<select id="edit-cc">'+
-              '<option value="">— No cost code —</option>'+
-              ccs.map(function(c){return '<option value="'+c.id+'"'+(entry.cost_code_id===c.id?' selected':'')+'>'+c.code+' — '+c.description+' ('+c.job_number+')</option>';}).join('')+
-            '</select>'+
-          '</div>'+
-          '<div class="form-group">'+
-            '<label>Per Diem Location</label>'+
-            '<select id="edit-pd">'+
-              locs.map(function(l){return '<option value="'+l.v+'"'+(entry.per_diem_location===l.v?' selected':'')+'>'+l.l+'</option>';}).join('')+
-            '</select>'+
+          '<div id="edit-hours-preview" style="padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius);font-size:13px;margin-bottom:16px"></div>'+
+          '<div class="form-row">'+
+            '<div class="form-group">'+
+              '<label>Cost Code</label>'+
+              '<select id="edit-cc">'+
+                '<option value="">— No cost code —</option>'+
+                ccs.map(function(c){return '<option value="'+c.id+'"'+(entry.cost_code_id===c.id?' selected':'')+'>'+c.code+' — '+c.description+' ('+c.job_number+')</option>';}).join('')+
+              '</select>'+
+            '</div>'+
+            '<div class="form-group">'+
+              '<label>Per Diem Location</label>'+
+              '<select id="edit-pd">'+
+                locs.map(function(l){return '<option value="'+l.v+'"'+(entry.per_diem_location===l.v?' selected':'')+'>'+l.l+'</option>';}).join('')+
+              '</select>'+
+            '</div>'+
           '</div>'+
           '<div class="form-group">'+
             '<label>Notes</label>'+
@@ -480,6 +521,7 @@ window.openEditModal=function(entryId){
         '</div>'+
       '</div>'+
     '</div>';
+  recalcEditHours();
 };
 
 window.closeEditModal=function(){
@@ -495,13 +537,19 @@ window.saveEdit=function(entryId){
     if(note.length<5){showToast('Explanation required (min 5 chars) for "Other"',true);return;}
   }
   var ccVal=document.getElementById('edit-cc').value;
+  var dateVal=document.getElementById('edit-date').value;
+  var ciVal=document.getElementById('edit-clockin').value;
+  var coVal=document.getElementById('edit-clockout').value;
   var body={
     cost_code_id:ccVal?parseInt(ccVal):undefined,
     per_diem_location:document.getElementById('edit-pd').value||'',
     notes:document.getElementById('edit-notes').value||'',
     reason_code:reason,
     reason_note:document.getElementById('edit-reason-note')?document.getElementById('edit-reason-note').value:'',
-    changed_by:10
+    changed_by:10,
+    work_date:dateVal||undefined,
+    clock_in:ciVal?new Date(ciVal).toISOString():undefined,
+    clock_out:coVal?new Date(coVal).toISOString():undefined
   };
   api('/api/time-entries/'+entryId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(result){
     if(result.error){showToast('Error: '+result.error,true);return;}
