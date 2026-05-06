@@ -93,12 +93,18 @@ var DATA = {
     {id:8,employee_id:11,cost_code_id:1,work_date:_initDate,clock_in:_initDate+'T05:00:00.000Z',clock_out:_initDate+'T23:00:00.000Z',hours_regular:8,hours_overtime:4,hours_double:6,per_diem:0,per_diem_location:null,source:'manual',status:'pending',foreman_id:null,notes:'18h day will be flagged',reason_code:'supervisor_override',reason_note:null,created_by:10,approved_by:null,created_at:_initDate,updated_at:_initDate}
   ],
   audit_logs: [],
-  validation_flags: []
+  validation_flags: [],
+  time_off_requests: [
+    {id:1,employee_id:2,type:'vacation',start_date:'2026-05-11',end_date:'2026-05-15',total_hours:40,status:'pending',notes:'Family vacation — flights already booked',requested_at:'2026-05-01T10:00:00.000Z',reviewed_by:null,reviewed_at:null},
+    {id:2,employee_id:7,type:'sick',start_date:'2026-05-04',end_date:'2026-05-04',total_hours:8,status:'approved',notes:'Doctor appointment',requested_at:'2026-05-02T08:00:00.000Z',reviewed_by:15,reviewed_at:'2026-05-02T09:00:00.000Z'},
+    {id:3,employee_id:4,type:'bereavement',start_date:'2026-05-07',end_date:'2026-05-09',total_hours:24,status:'approved',notes:'Family emergency',requested_at:'2026-05-05T07:00:00.000Z',reviewed_by:15,reviewed_at:'2026-05-05T08:00:00.000Z'}
+  ]
 };
 
 var nextEntryId = 9;
 var nextAuditId = 1;
 var nextFlagId = 1;
+var nextTimeOffId = 4;
 
 function enrichEntry(te) {
   var emp = null; var cc = null;
@@ -204,6 +210,11 @@ module.exports = function handler(req, res) {
             created_at: new Date().toISOString(), updated_at: new Date().toISOString()
           };
           DATA.time_entries.push(entry);
+          DATA.audit_logs.push({ id: nextAuditId++, table_name: 'time_entries', record_id: entry.id,
+            action: 'PUNCH_IN', before_state: null, after_state: JSON.parse(JSON.stringify(entry)),
+            changed_by: body.foreman_id || 1, change_reason: 'punch_in', change_note: 'Clocked in by foreman',
+            ip_address: null, user_agent: req.headers['user-agent'] || null,
+            created_at: new Date().toISOString() });
           results.push(enrichEntry(entry));
         }
         return send({ punched_in: results.length, already_clocked_in: alreadyIn, entries: results }, 201);
@@ -278,6 +289,12 @@ module.exports = function handler(req, res) {
           reason_note: body.reason_note || null, created_by: body.created_by || 15, approved_by: null,
           created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
         DATA.time_entries.push(entry);
+        DATA.audit_logs.push({ id: nextAuditId++, table_name: 'time_entries', record_id: entry.id,
+          action: 'CREATE', before_state: null, after_state: JSON.parse(JSON.stringify(entry)),
+          changed_by: body.created_by || 15, change_reason: body.reason_code || 'manual_entry',
+          change_note: body.reason_note || 'Manual time entry created',
+          ip_address: null, user_agent: req.headers['user-agent'] || null,
+          created_at: new Date().toISOString() });
         return send(entry, 201);
       });
     }
@@ -294,6 +311,25 @@ module.exports = function handler(req, res) {
         var before = JSON.parse(JSON.stringify(te));
         if (body.status) te.status = body.status;
         if (body.cost_code_id) te.cost_code_id = parseInt(body.cost_code_id);
+        if (body.work_date) te.work_date = body.work_date;
+        if (body.clock_in !== undefined) te.clock_in = body.clock_in || null;
+        if (body.clock_out !== undefined) te.clock_out = body.clock_out || null;
+        if (te.clock_in && te.clock_out) {
+          var diffMs = new Date(te.clock_out).getTime() - new Date(te.clock_in).getTime();
+          var totalHours = Math.round((diffMs / 3600000) * 100) / 100;
+          if (totalHours < 0) totalHours = 0;
+          var hrs = calcHours(totalHours);
+          te.hours_regular = hrs.regular;
+          te.hours_overtime = hrs.overtime;
+          te.hours_double = hrs.doubleTime;
+        }
+        if (te.status === 'clocked_in' && te.clock_out) te.status = 'pending';
+        if (body.total_hours !== undefined) {
+          var manHrs = calcHours(body.total_hours);
+          te.hours_regular = manHrs.regular;
+          te.hours_overtime = manHrs.overtime;
+          te.hours_double = manHrs.doubleTime;
+        }
         if (body.per_diem_location !== undefined) {
           te.per_diem_location = body.per_diem_location || null;
           te.per_diem = body.per_diem_location ? calcPerDiem(body.per_diem_location).amount : 0;
@@ -305,7 +341,7 @@ module.exports = function handler(req, res) {
         if (body.status === 'approved') te.approved_at = new Date().toISOString();
         te.updated_at = new Date().toISOString();
         DATA.audit_logs.push({ id: nextAuditId++, table_name: 'time_entries', record_id: teId,
-          action: 'UPDATE', before_state: before, after_state: JSON.parse(JSON.stringify(te)),
+          action: body.status === 'approved' ? 'APPROVE' : 'UPDATE', before_state: before, after_state: JSON.parse(JSON.stringify(te)),
           changed_by: body.changed_by || body.approved_by || 0,
           change_reason: body.reason_code || null, change_note: body.reason_note || null,
           ip_address: null, user_agent: req.headers['user-agent'] || null,
@@ -461,6 +497,72 @@ module.exports = function handler(req, res) {
       }
       aRows.sort(function(a, b) { return new Date(b.created_at) - new Date(a.created_at); });
       return send(aRows.slice(0, 100));
+    }
+
+    // TIME-OFF REQUESTS
+    if (p === '/api/time-off-requests' && m === 'GET') {
+      var tors = DATA.time_off_requests.slice();
+      if (q.employee_id) tors = tors.filter(function(r) { return r.employee_id === parseInt(q.employee_id); });
+      if (q.status) tors = tors.filter(function(r) { return r.status === q.status; });
+      var enrichedTors = tors.map(function(r) {
+        var emp = null;
+        for (var i = 0; i < DATA.employees.length; i++) { if (DATA.employees[i].id === r.employee_id) { emp = DATA.employees[i]; break; } }
+        emp = emp || {};
+        var result = {};
+        var keys = Object.keys(r);
+        for (var k = 0; k < keys.length; k++) result[keys[k]] = r[keys[k]];
+        result.first_name = emp.first_name; result.last_name = emp.last_name;
+        result.employee_number = emp.employee_number;
+        return result;
+      });
+      enrichedTors.sort(function(a, b) { return new Date(b.requested_at) - new Date(a.requested_at); });
+      return send(enrichedTors);
+    }
+
+    if (p === '/api/time-off-requests' && m === 'POST') {
+      return parseBody().then(function(body) {
+        if (!body.employee_id || !body.type || !body.start_date || !body.end_date) return send({ error: 'employee_id, type, start_date, and end_date are required' }, 400);
+        var request = {
+          id: nextTimeOffId++, employee_id: body.employee_id, type: body.type,
+          start_date: body.start_date, end_date: body.end_date,
+          total_hours: body.total_hours || 8, status: body.status || 'pending',
+          notes: body.notes || null, requested_at: new Date().toISOString(),
+          reviewed_by: body.reviewed_by || null, reviewed_at: body.reviewed_by ? new Date().toISOString() : null
+        };
+        DATA.time_off_requests.push(request);
+        DATA.audit_logs.push({ id: nextAuditId++, table_name: 'time_off_requests', record_id: request.id,
+          action: 'TIME_OFF_REQUEST', before_state: null, after_state: JSON.parse(JSON.stringify(request)),
+          changed_by: body.employee_id, change_reason: 'time_off_request',
+          change_note: body.type + ' request: ' + body.start_date + ' to ' + body.end_date,
+          ip_address: null, user_agent: req.headers['user-agent'] || null,
+          created_at: new Date().toISOString() });
+        return send(request, 201);
+      });
+    }
+
+    var torMatch = p.match(/^\/api\/time-off-requests\/(\d+)$/);
+    if (torMatch && m === 'PUT') {
+      var torId = parseInt(torMatch[1]);
+      return parseBody().then(function(body) {
+        var tor = null;
+        for (var i = 0; i < DATA.time_off_requests.length; i++) { if (DATA.time_off_requests[i].id === torId) { tor = DATA.time_off_requests[i]; break; } }
+        if (!tor) return send({ error: 'Not found' }, 404);
+        var torBefore = JSON.parse(JSON.stringify(tor));
+        if (body.status) tor.status = body.status;
+        if (body.status === 'approved' || body.status === 'denied') {
+          tor.reviewed_by = body.reviewed_by || 15;
+          tor.reviewed_at = new Date().toISOString();
+        }
+        if (body.notes !== undefined) tor.notes = body.notes;
+        DATA.audit_logs.push({ id: nextAuditId++, table_name: 'time_off_requests', record_id: torId,
+          action: body.status === 'approved' ? 'TIME_OFF_APPROVE' : body.status === 'denied' ? 'TIME_OFF_DENY' : 'TIME_OFF_UPDATE',
+          before_state: torBefore, after_state: JSON.parse(JSON.stringify(tor)),
+          changed_by: body.reviewed_by || 15, change_reason: body.status || 'update',
+          change_note: body.notes || null,
+          ip_address: null, user_agent: req.headers['user-agent'] || null,
+          created_at: new Date().toISOString() });
+        return send(tor);
+      });
     }
 
     if (p === '/api/upload/proof-photo' && m === 'POST') {

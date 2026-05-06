@@ -86,23 +86,35 @@ tr:hover td{background:var(--gray-50)}
 .modal-body{padding:24px}
 .modal-footer{padding:16px 24px;border-top:1px solid var(--gray-200);display:flex;justify-content:flex-end;gap:12px}
 .read-only-field{padding:8px 12px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius);font-size:14px;color:var(--gray-700)}
+.role-select-wrap{padding:12px 20px;border-bottom:1px solid rgba(255,255,255,.1)}
+.role-select-wrap label{color:rgba(255,255,255,.5);font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.role-select-wrap select{width:100%;background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit}
+.role-select-wrap select option{background:var(--gray-900);color:#fff}
+.status-banner{border-radius:var(--radius);padding:24px;text-align:center;margin-bottom:20px}
+.status-banner.clocked-in{background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:2px solid var(--green-600)}
+.status-banner.clocked-out{background:linear-gradient(135deg,#f9fafb,#f3f4f6);border:2px solid var(--gray-300)}
+.time-off-type{display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
 </style>
 </head>
 <body>
 <div class="app">
-<aside class="sidebar">
+<aside class="sidebar" id="sidebar">
   <div class="logo">Crew<span>Clock</span></div>
-  <nav>
-    <a data-page="dashboard" class="active" onclick="showPage('dashboard')"><span>Dashboard</span></a>
-    <a data-page="huddle" onclick="showPage('huddle')"><span>Crew Huddle</span></a>
-    <a data-page="entries" onclick="showPage('entries')"><span>Time Entries</span></a>
-    <a data-page="manual" onclick="showPage('manual')"><span>Manual Entry</span></a>
-    <a data-page="validation" onclick="showPage('validation')"><span>Review &amp; Fix</span></a>
-    <a data-page="export" onclick="showPage('export')"><span>Sage 300 Export</span></a>
-    <a data-page="audit" onclick="showPage('audit')"><span>Audit Trail</span></a>
-  </nav>
+  <div class="role-select-wrap">
+    <label>Demo As</label>
+    <select id="role-select" onchange="switchRole(this.value)">
+      <option value="admin">Office Admin</option>
+      <option value="foreman">Foreman</option>
+      <option value="field">Field Technician</option>
+    </select>
+    <div id="emp-select-wrap" style="display:none;margin-top:8px">
+      <label>Employee</label>
+      <select id="emp-select" onchange="switchEmployee(parseInt(this.value))"></select>
+    </div>
+  </div>
+  <nav id="sidebar-nav"></nav>
   <div style="padding:0 20px;font-size:11px;color:rgba(255,255,255,.3)">v1.1 &middot; SOX Compliant</div>
 </aside>
 <main class="main" id="main-content"></main>
@@ -113,6 +125,8 @@ tr:hover td{background:var(--gray-50)}
 <script>
 const API='';
 let currentPage='dashboard',huddleTab='punch-in',selectedCrew=new Set(),photoAttached=false;
+let currentRole='admin',currentEmployeeId=null;
+var cachedEmployees=[];
 
 function showToast(msg,isError){
   const c=document.getElementById('toast-container');
@@ -122,7 +136,7 @@ function showToast(msg,isError){
 
 window.showPage=function(page){
   currentPage=page;
-  document.querySelectorAll('.sidebar a').forEach(function(a){a.classList.toggle('active',a.dataset.page===page);});
+  document.querySelectorAll('#sidebar-nav a').forEach(function(a){a.classList.toggle('active',a.dataset.page===page);});
   var main=document.getElementById('main-content');
   switch(page){
     case 'dashboard':renderDashboard(main);break;
@@ -132,6 +146,10 @@ window.showPage=function(page){
     case 'validation':renderValidation(main);break;
     case 'export':renderExport(main);break;
     case 'audit':renderAudit(main);break;
+    case 'my-dashboard':renderMyDashboard(main);break;
+    case 'my-timecard':renderMyTimecard(main);break;
+    case 'time-off':renderTimeOff(main);break;
+    case 'manage-time-off':renderManageTimeOff(main);break;
   }
 };
 
@@ -698,22 +716,32 @@ var FIELD_LABELS={
   notes:'Notes',reason_code:'Reason Code',reason_note:'Reason Note',approved_by:'Approved By',approved_at:'Approved At',
   clock_out:'Clock Out',hours_regular:'Regular Hours',hours_overtime:'Overtime Hours',hours_double:'Double Time Hours',
   updated_at:'Updated At',foreman_id:'Foreman ID',employee_id:'Employee ID',work_date:'Work Date',clock_in:'Clock In',
-  source:'Source',created_by:'Created By',created_at:'Created At',reason_note:'Reason Note'
+  source:'Source',created_by:'Created By',created_at:'Created At',
+  type:'Type',start_date:'Start Date',end_date:'End Date',total_hours:'Total Hours',
+  requested_at:'Requested At',reviewed_by:'Reviewed By',reviewed_at:'Reviewed At'
 };
 var SKIP_FIELDS={id:1,updated_at:1};
 
 function diffStates(before,after){
-  if(!before||!after)return[];
+  if(!after)return[];
   var changes=[];
   var keys=Object.keys(after);
+  var SHOW_CREATE={employee_id:1,work_date:1,clock_in:1,clock_out:1,status:1,source:1,type:1,start_date:1,end_date:1,total_hours:1};
   for(var i=0;i<keys.length;i++){
     var k=keys[i];
     if(SKIP_FIELDS[k])continue;
-    var bv=before[k],av=after[k];
-    if(bv==null)bv='';
-    if(av==null)av='';
-    if(String(bv)!==String(av)){
-      changes.push({field:FIELD_LABELS[k]||k,before:bv===''?'(empty)':String(bv),after:av===''?'(empty)':String(av)});
+    if(!before){
+      if(!SHOW_CREATE[k])continue;
+      var av2=after[k];
+      if(av2==null||av2==='')continue;
+      changes.push({field:FIELD_LABELS[k]||k,before:'(new)',after:String(av2)});
+    }else{
+      var bv=before[k],av=after[k];
+      if(bv==null)bv='';
+      if(av==null)av='';
+      if(String(bv)!==String(av)){
+        changes.push({field:FIELD_LABELS[k]||k,before:bv===''?'(empty)':String(bv),after:av===''?'(empty)':String(av)});
+      }
     }
   }
   return changes;
@@ -755,7 +783,7 @@ function renderAudit(el){
         var who=l.first_name?l.first_name+' '+l.last_name:'User #'+l.changed_by;
         var ts=new Date(l.created_at).toLocaleString();
         var changes=diffStates(l.before_state,l.after_state);
-        var actionBadge=l.action==='PUNCH_OUT'?'badge-approved':l.action==='DELETE'?'badge-flagged':'badge-pending';
+        var actionBadge=l.action==='PUNCH_OUT'||l.action==='APPROVE'||l.action==='TIME_OFF_APPROVE'?'badge-approved':l.action==='DELETE'||l.action==='TIME_OFF_DENY'?'badge-flagged':l.action==='PUNCH_IN'||l.action==='CREATE'?'badge-clocked-in':'badge-pending';
         if(changes.length===0){
           tableRows+='<tr>'+
             '<td style="font-size:12px;font-family:monospace;white-space:nowrap">'+ts+'</td>'+
@@ -791,8 +819,10 @@ function renderAudit(el){
       '</div>'+
       '<div class="stat-grid">'+
         '<div class="stat-card"><div class="value">'+logs.length+'</div><div class="label">Total Audit Entries</div></div>'+
-        '<div class="stat-card"><div class="value" style="color:var(--blue-600)">'+logs.filter(function(l){return l.action==='UPDATE';}).length+'</div><div class="label">Edits</div></div>'+
+        '<div class="stat-card"><div class="value" style="color:var(--green-600)">'+logs.filter(function(l){return l.action==='PUNCH_IN';}).length+'</div><div class="label">Punch Ins</div></div>'+
         '<div class="stat-card"><div class="value" style="color:var(--green-600)">'+logs.filter(function(l){return l.action==='PUNCH_OUT';}).length+'</div><div class="label">Punch Outs</div></div>'+
+        '<div class="stat-card"><div class="value" style="color:var(--blue-600)">'+logs.filter(function(l){return l.action==='UPDATE'||l.action==='APPROVE';}).length+'</div><div class="label">Edits / Approvals</div></div>'+
+        '<div class="stat-card"><div class="value" style="color:var(--amber-500)">'+logs.filter(function(l){return l.action.indexOf('TIME_OFF')===0;}).length+'</div><div class="label">Time Off Actions</div></div>'+
       '</div>'+
       '<div class="card" style="padding:0;overflow:auto">'+
         '<table><thead><tr>'+
@@ -818,7 +848,300 @@ window.downloadAuditCSV=function(){
   showToast('Audit trail exported to CSV');
 };
 
-showPage('dashboard');
+function renderSidebarNav(){
+  var nav=document.getElementById('sidebar-nav');
+  var items=[];
+  if(currentRole==='field'){
+    items=[{page:'my-dashboard',label:'My Dashboard'},{page:'my-timecard',label:'My Timecard'},{page:'time-off',label:'Request Time Off'}];
+  }else if(currentRole==='foreman'){
+    items=[{page:'dashboard',label:'Dashboard'},{page:'huddle',label:'Crew Huddle'},{page:'entries',label:'Time Entries'},{page:'manual',label:'Manual Entry'},{page:'time-off',label:'Request Time Off'}];
+  }else{
+    items=[{page:'dashboard',label:'Dashboard'},{page:'huddle',label:'Crew Huddle'},{page:'entries',label:'Time Entries'},{page:'manual',label:'Manual Entry'},{page:'manage-time-off',label:'Manage Time Off'},{page:'validation',label:'Review & Fix'},{page:'export',label:'Sage 300 Export'},{page:'audit',label:'Audit Trail'}];
+  }
+  nav.innerHTML=items.map(function(it){
+    return '<a data-page="'+it.page+'"'+(currentPage===it.page?' class="active"':'')+' onclick="showPage(\''+it.page+'\')"><span>'+it.label+'</span></a>';
+  }).join('');
+}
+
+window.switchRole=function(role){
+  currentRole=role;
+  var empWrap=document.getElementById('emp-select-wrap');
+  var empSelect=document.getElementById('emp-select');
+  if(role==='field'||role==='foreman'){
+    var filterRole=role==='foreman'?'foreman':'worker';
+    var filtered=cachedEmployees.filter(function(e){return e.role===filterRole;});
+    empSelect.innerHTML=filtered.map(function(e){
+      return '<option value="'+e.id+'"'+(e.id===currentEmployeeId?' selected':'')+'>'+e.first_name+' '+e.last_name+'</option>';
+    }).join('');
+    empWrap.style.display='block';
+    if(filtered.length>0&&(!currentEmployeeId||!filtered.some(function(e){return e.id===currentEmployeeId;}))){
+      currentEmployeeId=filtered[0].id;
+    }
+  }else{
+    empWrap.style.display='none';
+    currentEmployeeId=15;
+  }
+  renderSidebarNav();
+  var firstPage=role==='field'?'my-dashboard':'dashboard';
+  showPage(firstPage);
+};
+
+window.switchEmployee=function(id){
+  currentEmployeeId=id;
+  showPage(currentPage);
+};
+
+function getEmpById(id){
+  for(var i=0;i<cachedEmployees.length;i++){if(cachedEmployees[i].id===id)return cachedEmployees[i];}
+  return null;
+}
+
+var TO_TYPE_LABELS={vacation:'Vacation',sick:'Sick Leave',pto:'Personal/PTO',bereavement:'Bereavement',jury_duty:'Jury Duty',holiday:'Holiday',comp:'Comp Time'};
+var TO_TYPE_COLORS={vacation:['#dbeafe','#1e40af'],sick:['#fee2e2','#991b1b'],pto:['#e0e7ff','#3730a3'],bereavement:['#f3e8ff','#6b21a8'],jury_duty:['#fef3c7','#92400e'],holiday:['#d1fae5','#065f46'],comp:['#fce7f3','#9d174d']};
+
+function renderMyDashboard(el){
+  if(!currentEmployeeId){el.innerHTML='<div class="card" style="text-align:center;padding:48px">Select an employee from the sidebar.</div>';return;}
+  var emp=getEmpById(currentEmployeeId);
+  if(!emp){el.innerHTML='<div class="card">Employee not found.</div>';return;}
+  Promise.all([api('/api/time-entries/clocked-in'),api('/api/time-entries?status=pending'),api('/api/time-off-requests?employee_id='+currentEmployeeId)]).then(function(results){
+    var allClocked=results[0],pending=results[1],myTimeOff=results[2];
+    var myEntry=null;
+    for(var i=0;i<allClocked.length;i++){if(allClocked[i].employee_id===currentEmployeeId){myEntry=allClocked[i];break;}}
+    var myPending=pending.filter(function(e){return e.employee_id===currentEmployeeId;});
+    var today=new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+    var pendingTO=myTimeOff.filter(function(r){return r.status==='pending';});
+    var approvedTO=myTimeOff.filter(function(r){return r.status==='approved';});
+
+    el.innerHTML=
+      '<div class="page-header"><div><h1>Welcome, '+emp.first_name+'</h1><div class="subtitle">'+today+' &middot; '+emp.employee_number+' &middot; '+(emp.crew_id?'Crew '+emp.crew_id:'No Crew')+'</div></div></div>'+
+      '<div class="status-banner '+(myEntry?'clocked-in':'clocked-out')+'">'+
+        (myEntry?
+          '<div style="font-size:14px;color:var(--green-700);font-weight:600;text-transform:uppercase;letter-spacing:1px">On The Clock</div>'+
+          '<div style="font-size:48px;font-weight:700;color:var(--green-700);margin:8px 0">'+fmtDuration(myEntry.clock_in)+'</div>'+
+          '<div style="color:var(--green-600)">Clocked in at '+fmtTime(myEntry.clock_in)+'</div>'
+        :
+          '<div style="font-size:14px;color:var(--gray-500);font-weight:600;text-transform:uppercase;letter-spacing:1px">Off The Clock</div>'+
+          '<div style="font-size:48px;font-weight:700;color:var(--gray-400);margin:8px 0">--:--</div>'+
+          '<div style="color:var(--gray-500)">Not currently clocked in</div>'
+        )+
+      '</div>'+
+      '<div class="stat-grid">'+
+        '<div class="stat-card"><div class="value" style="color:var(--blue-600)">'+myPending.length+'</div><div class="label">Entries Pending Approval</div></div>'+
+        '<div class="stat-card"><div class="value" style="color:var(--amber-500)">'+pendingTO.length+'</div><div class="label">Time Off Requests Pending</div></div>'+
+        '<div class="stat-card"><div class="value" style="color:var(--green-600)">'+approvedTO.length+'</div><div class="label">Time Off Approved</div></div>'+
+      '</div>'+
+      '<div class="card"><h2>Quick Actions</h2>'+
+        '<div style="display:flex;gap:12px;flex-wrap:wrap">'+
+          '<button class="btn btn-primary" onclick="showPage(\'my-timecard\')">View My Timecard</button>'+
+          '<button class="btn btn-outline" onclick="showPage(\'time-off\')">Request Time Off</button>'+
+        '</div>'+
+      '</div>'+
+      (myPending.length>0?
+        '<div class="card"><h2>Recent Pending Entries</h2>'+
+          '<table><thead><tr><th>Date</th><th>Clock In</th><th>Clock Out</th><th>Regular</th><th>OT</th><th>Status</th></tr></thead><tbody>'+
+          myPending.slice(0,5).map(function(e){
+            return '<tr><td>'+new Date(e.work_date).toLocaleDateString()+'</td><td style="font-family:monospace">'+fmtTime(e.clock_in)+'</td><td style="font-family:monospace">'+(e.clock_out?fmtTime(e.clock_out):'—')+'</td><td>'+Number(e.hours_regular).toFixed(1)+'</td><td>'+(Number(e.hours_overtime)>0?Number(e.hours_overtime).toFixed(1):'—')+'</td><td><span class="badge badge-pending">pending</span></td></tr>';
+          }).join('')+
+          '</tbody></table></div>':'');
+  });
+}
+
+function renderMyTimecard(el){
+  if(!currentEmployeeId){el.innerHTML='<div class="card" style="text-align:center;padding:48px">Select an employee from the sidebar.</div>';return;}
+  var emp=getEmpById(currentEmployeeId);
+  api('/api/time-entries').then(function(entries){
+    var myEntries=entries.filter(function(e){return e.employee_id===currentEmployeeId;});
+    myEntries.sort(function(a,b){return(b.work_date||'').localeCompare(a.work_date||'');});
+    var totalReg=0,totalOT=0,totalDT=0;
+    myEntries.forEach(function(e){totalReg+=Number(e.hours_regular);totalOT+=Number(e.hours_overtime);totalDT+=Number(e.hours_double);});
+    var sb=function(s){return({pending:'badge-pending',approved:'badge-approved',flagged:'badge-flagged',rejected:'badge-flagged',clocked_in:'badge-clocked-in'}[s]||'');};
+
+    el.innerHTML=
+      '<div class="page-header"><div><h1>My Timecard</h1><div class="subtitle">'+(emp?emp.first_name+' '+emp.last_name+' &middot; '+emp.employee_number:'')+' &middot; '+myEntries.length+' entries</div></div></div>'+
+      '<div class="stat-grid">'+
+        '<div class="stat-card"><div class="value">'+totalReg.toFixed(1)+'</div><div class="label">Regular Hours</div></div>'+
+        '<div class="stat-card"><div class="value" style="color:var(--amber-500)">'+totalOT.toFixed(1)+'</div><div class="label">Overtime Hours</div></div>'+
+        '<div class="stat-card"><div class="value" style="color:var(--red-500)">'+totalDT.toFixed(1)+'</div><div class="label">Double Time</div></div>'+
+        '<div class="stat-card"><div class="value" style="color:var(--green-600)">'+(totalReg+totalOT+totalDT).toFixed(1)+'</div><div class="label">Total Hours</div></div>'+
+      '</div>'+
+      '<div class="card" style="padding:0;overflow:auto">'+
+        '<table><thead><tr><th>Date</th><th>Clock In</th><th>Clock Out</th><th>Cost Code</th><th>Reg</th><th>OT</th><th>DT</th><th>Per Diem</th><th>Status</th></tr></thead><tbody>'+
+        (myEntries.length===0?'<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--gray-500)">No time entries found</td></tr>':
+          myEntries.map(function(e){
+            var total=Number(e.hours_regular)+Number(e.hours_overtime)+Number(e.hours_double);
+            return '<tr>'+
+              '<td>'+new Date(e.work_date).toLocaleDateString()+'</td>'+
+              '<td style="font-family:monospace;font-size:12px">'+(e.clock_in?fmtTime(e.clock_in):'—')+'</td>'+
+              '<td style="font-family:monospace;font-size:12px">'+(e.clock_out?fmtTime(e.clock_out):(e.status==='clocked_in'?'<span class="pulse" style="color:var(--green-600);font-weight:700">ON CLOCK</span>':'—'))+'</td>'+
+              '<td>'+(e.cost_code_value?'<span style="font-family:monospace">'+e.cost_code_value+'</span>':'<span style="color:var(--amber-500);font-size:12px">Unassigned</span>')+'</td>'+
+              '<td>'+(total>0?Number(e.hours_regular).toFixed(1):'—')+'</td>'+
+              '<td>'+(Number(e.hours_overtime)>0?'<strong style="color:var(--amber-500)">'+Number(e.hours_overtime).toFixed(1)+'</strong>':'—')+'</td>'+
+              '<td>'+(Number(e.hours_double)>0?'<strong style="color:var(--red-500)">'+Number(e.hours_double).toFixed(1)+'</strong>':'—')+'</td>'+
+              '<td>'+(Number(e.per_diem)>0?'$'+Number(e.per_diem).toFixed(0):'—')+'</td>'+
+              '<td><span class="badge '+sb(e.status)+'">'+e.status.replace('_',' ')+'</span></td>'+
+            '</tr>';
+          }).join(''))+
+        '</tbody></table></div>';
+  });
+}
+
+function renderTimeOff(el){
+  var empId=currentEmployeeId;
+  if(!empId){el.innerHTML='<div class="card" style="text-align:center;padding:48px">Select an employee from the sidebar.</div>';return;}
+  var emp=getEmpById(empId);
+  var types=[{v:'vacation',l:'Vacation'},{v:'sick',l:'Sick Leave'},{v:'pto',l:'Personal/PTO'},{v:'bereavement',l:'Bereavement'},{v:'jury_duty',l:'Jury Duty'},{v:'comp',l:'Comp Time'}];
+
+  api('/api/time-off-requests?employee_id='+empId).then(function(requests){
+    var sb=function(s){return s==='approved'?'badge-approved':s==='denied'?'badge-flagged':'badge-pending';};
+    el.innerHTML=
+      '<div class="page-header"><div><h1>Request Time Off</h1><div class="subtitle">'+(emp?emp.first_name+' '+emp.last_name:'')+'</div></div></div>'+
+      '<div class="card"><h2>New Request</h2>'+
+        '<div class="form-row">'+
+          '<div class="form-group"><label>Type *</label><select id="to-type">'+types.map(function(t){return '<option value="'+t.v+'">'+t.l+'</option>';}).join('')+'</select></div>'+
+          '<div class="form-group"><label>Total Hours</label><input type="number" id="to-hours" value="8" min="1" max="80" step="1"/></div>'+
+        '</div>'+
+        '<div class="form-row">'+
+          '<div class="form-group"><label>Start Date *</label><input type="date" id="to-start"/></div>'+
+          '<div class="form-group"><label>End Date *</label><input type="date" id="to-end"/></div>'+
+        '</div>'+
+        '<div class="form-group"><label>Notes</label><textarea id="to-notes" rows="2" placeholder="Reason for request..."></textarea></div>'+
+        '<div style="display:flex;justify-content:flex-end"><button class="btn btn-primary" onclick="submitTimeOff()">Submit Request</button></div>'+
+      '</div>'+
+      '<div class="card"><h2>My Requests</h2>'+
+        (requests.length===0?'<div style="text-align:center;padding:32px;color:var(--gray-500)">No time off requests yet.</div>':
+          '<table><thead><tr><th>Type</th><th>Dates</th><th>Hours</th><th>Status</th><th>Notes</th><th>Submitted</th></tr></thead><tbody>'+
+          requests.map(function(r){
+            var tc=TO_TYPE_COLORS[r.type]||['#eee','#333'];
+            return '<tr>'+
+              '<td><span class="time-off-type" style="background:'+tc[0]+';color:'+tc[1]+'">'+(TO_TYPE_LABELS[r.type]||r.type)+'</span></td>'+
+              '<td>'+new Date(r.start_date).toLocaleDateString()+' — '+new Date(r.end_date).toLocaleDateString()+'</td>'+
+              '<td>'+r.total_hours+'h</td>'+
+              '<td><span class="badge '+sb(r.status)+'">'+r.status+'</span></td>'+
+              '<td style="max-width:200px;font-size:12px;color:var(--gray-500)">'+(r.notes||'—')+'</td>'+
+              '<td style="font-size:12px">'+new Date(r.requested_at).toLocaleDateString()+'</td>'+
+            '</tr>';
+          }).join('')+
+          '</tbody></table>')+
+      '</div>';
+  });
+}
+
+window.submitTimeOff=function(){
+  var startVal=document.getElementById('to-start').value;
+  var endVal=document.getElementById('to-end').value;
+  if(!startVal||!endVal){showToast('Start and end dates are required',true);return;}
+  var body={
+    employee_id:currentEmployeeId,
+    type:document.getElementById('to-type').value,
+    start_date:startVal,end_date:endVal,
+    total_hours:parseInt(document.getElementById('to-hours').value)||8,
+    notes:document.getElementById('to-notes').value||null
+  };
+  api('/api/time-off-requests',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(result){
+    if(result.error){showToast('Error: '+result.error,true);return;}
+    showToast('Time off request submitted');
+    renderTimeOff(document.getElementById('main-content'));
+  });
+};
+
+function renderManageTimeOff(el){
+  Promise.all([api('/api/time-off-requests'),api('/api/employees')]).then(function(results){
+    var requests=results[0],emps=results[1];
+    var pendingReqs=requests.filter(function(r){return r.status==='pending';});
+    var otherReqs=requests.filter(function(r){return r.status!=='pending';});
+    var types=[{v:'vacation',l:'Vacation'},{v:'sick',l:'Sick Leave'},{v:'pto',l:'Personal/PTO'},{v:'bereavement',l:'Bereavement'},{v:'jury_duty',l:'Jury Duty'},{v:'holiday',l:'Holiday'},{v:'comp',l:'Comp Time'}];
+    var sb=function(s){return s==='approved'?'badge-approved':s==='denied'?'badge-flagged':'badge-pending';};
+
+    el.innerHTML=
+      '<div class="page-header"><div><h1>Manage Time Off</h1><div class="subtitle">Review requests, add vacation, sick, and holiday time for employees.</div></div></div>'+
+      (pendingReqs.length>0?
+        '<div class="card" style="border-left:4px solid var(--amber-500)"><h2 style="color:var(--amber-500)">Pending Requests ('+pendingReqs.length+')</h2>'+
+          pendingReqs.map(function(r){
+            var tc=TO_TYPE_COLORS[r.type]||['#eee','#333'];
+            return '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--gray-100)">'+
+              '<div>'+
+                '<strong>'+(r.first_name||'')+' '+(r.last_name||'')+'</strong>'+
+                ' <span class="time-off-type" style="margin-left:8px;background:'+tc[0]+';color:'+tc[1]+'">'+(TO_TYPE_LABELS[r.type]||r.type)+'</span>'+
+                '<div style="font-size:13px;color:var(--gray-500);margin-top:2px">'+new Date(r.start_date).toLocaleDateString()+' — '+new Date(r.end_date).toLocaleDateString()+' &middot; '+r.total_hours+'h'+(r.notes?' &middot; '+r.notes:'')+'</div>'+
+              '</div>'+
+              '<div style="display:flex;gap:8px">'+
+                '<button class="btn btn-success btn-sm" onclick="reviewTimeOff('+r.id+',\'approved\')">Approve</button>'+
+                '<button class="btn btn-danger btn-sm" onclick="reviewTimeOff('+r.id+',\'denied\')">Deny</button>'+
+              '</div>'+
+            '</div>';
+          }).join('')+
+        '</div>':
+        '<div class="card" style="text-align:center;padding:32px;color:var(--green-600);border-left:4px solid var(--green-600)"><strong>No pending requests</strong> — All time off requests have been reviewed.</div>'
+      )+
+      '<div class="card"><h2>Add Time Off for Employee</h2>'+
+        '<div class="form-row">'+
+          '<div class="form-group"><label>Employee *</label><select id="ato-emp">'+emps.filter(function(e){return e.role!=='admin';}).map(function(e){return '<option value="'+e.id+'">'+e.last_name+', '+e.first_name+' ('+e.employee_number+')</option>';}).join('')+'</select></div>'+
+          '<div class="form-group"><label>Type *</label><select id="ato-type">'+types.map(function(t){return '<option value="'+t.v+'">'+t.l+'</option>';}).join('')+'</select></div>'+
+        '</div>'+
+        '<div class="form-row">'+
+          '<div class="form-group"><label>Start Date *</label><input type="date" id="ato-start"/></div>'+
+          '<div class="form-group"><label>End Date *</label><input type="date" id="ato-end"/></div>'+
+        '</div>'+
+        '<div class="form-row">'+
+          '<div class="form-group"><label>Hours</label><input type="number" id="ato-hours" value="8" min="1" max="80" step="1"/></div>'+
+          '<div class="form-group"><label>Notes</label><input id="ato-notes" placeholder="e.g. Company holiday, approved by HR..."/></div>'+
+        '</div>'+
+        '<div style="display:flex;justify-content:flex-end"><button class="btn btn-primary" onclick="addTimeOffAdmin()">Add Time Off</button></div>'+
+      '</div>'+
+      (otherReqs.length>0?
+        '<div class="card"><h2>All Reviewed Requests</h2>'+
+          '<table><thead><tr><th>Employee</th><th>Type</th><th>Dates</th><th>Hours</th><th>Status</th><th>Notes</th><th>Reviewed</th></tr></thead><tbody>'+
+          otherReqs.map(function(r){
+            var tc=TO_TYPE_COLORS[r.type]||['#eee','#333'];
+            return '<tr>'+
+              '<td style="font-weight:600">'+(r.first_name||'')+' '+(r.last_name||'')+'</td>'+
+              '<td><span class="time-off-type" style="background:'+tc[0]+';color:'+tc[1]+'">'+(TO_TYPE_LABELS[r.type]||r.type)+'</span></td>'+
+              '<td>'+new Date(r.start_date).toLocaleDateString()+' — '+new Date(r.end_date).toLocaleDateString()+'</td>'+
+              '<td>'+r.total_hours+'h</td>'+
+              '<td><span class="badge '+sb(r.status)+'">'+r.status+'</span></td>'+
+              '<td style="max-width:200px;font-size:12px;color:var(--gray-500)">'+(r.notes||'—')+'</td>'+
+              '<td style="font-size:12px">'+(r.reviewed_at?new Date(r.reviewed_at).toLocaleDateString():'—')+'</td>'+
+            '</tr>';
+          }).join('')+
+          '</tbody></table></div>':''
+      );
+  });
+}
+
+window.reviewTimeOff=function(id,status){
+  api('/api/time-off-requests/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:status,reviewed_by:15})}).then(function(result){
+    if(result.error){showToast('Error: '+result.error,true);return;}
+    showToast('Request '+status);
+    renderManageTimeOff(document.getElementById('main-content'));
+  });
+};
+
+window.addTimeOffAdmin=function(){
+  var startVal=document.getElementById('ato-start').value;
+  var endVal=document.getElementById('ato-end').value;
+  if(!startVal||!endVal){showToast('Start and end dates are required',true);return;}
+  var body={
+    employee_id:parseInt(document.getElementById('ato-emp').value),
+    type:document.getElementById('ato-type').value,
+    start_date:startVal,end_date:endVal,
+    total_hours:parseInt(document.getElementById('ato-hours').value)||8,
+    notes:document.getElementById('ato-notes').value||null,
+    status:'approved',reviewed_by:15
+  };
+  api('/api/time-off-requests',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(result){
+    if(result.error){showToast('Error: '+result.error,true);return;}
+    showToast('Time off added for employee');
+    renderManageTimeOff(document.getElementById('main-content'));
+  });
+};
+
+// Init: load employees then render
+api('/api/employees').then(function(emps){
+  cachedEmployees=emps;
+  currentEmployeeId=15;
+  renderSidebarNav();
+  showPage('dashboard');
+});
 </script>
 </body>
 </html>
