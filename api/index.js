@@ -278,13 +278,15 @@ module.exports = function handler(req, res) {
     if (p === '/api/time-entries' && m === 'POST') {
       return parseBody().then(function(body) {
         if (body.source === 'manual' && !body.reason_code) return send({ error: 'reason_code is required' }, 400);
-        var hours = calcHours(body.total_hours || 0);
+        var isTimeOff = body.source === 'time_off';
+        var hours = isTimeOff ? { regular: body.total_hours || 8, overtime: 0, doubleTime: 0 } : calcHours(body.total_hours || 0);
         var pd = body.per_diem_location ? calcPerDiem(body.per_diem_location) : { amount: 0 };
-        var entry = { id: nextEntryId++, employee_id: body.employee_id, cost_code_id: body.cost_code_id,
+        var entry = { id: nextEntryId++, employee_id: body.employee_id, cost_code_id: body.cost_code_id || null,
           work_date: body.work_date, clock_in: body.clock_in || null, clock_out: body.clock_out || null,
           hours_regular: hours.regular, hours_overtime: hours.overtime,
           hours_double: hours.doubleTime, per_diem: pd.amount, per_diem_location: body.per_diem_location || null,
-          source: body.source || 'manual', status: 'pending', foreman_id: body.foreman_id || null,
+          time_off_type: body.time_off_type || null,
+          source: body.source || 'manual', status: isTimeOff ? (body.status || 'approved') : 'pending', foreman_id: body.foreman_id || null,
           notes: body.notes || null, reason_code: body.reason_code || null,
           reason_note: body.reason_note || null, created_by: body.created_by || 15, approved_by: null,
           created_at: new Date().toISOString(), updated_at: new Date().toISOString() };

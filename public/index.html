@@ -407,12 +407,12 @@ function renderEntries(el){
             '<td>'+new Date(e.work_date).toLocaleDateString()+'</td>'+
             '<td style="font-family:monospace;font-size:12px">'+(e.clock_in?fmtTime(e.clock_in):'—')+'</td>'+
             '<td style="font-family:monospace;font-size:12px">'+(e.clock_out?fmtTime(e.clock_out):(e.status==='clocked_in'?'<span class="pulse" style="color:var(--green-600);font-weight:700">ON CLOCK</span>':'—'))+'</td>'+
-            '<td>'+(e.cost_code_value?'<span style="font-family:monospace">'+e.cost_code_value+'</span><br><span style="font-size:11px;color:var(--gray-500)">'+(e.job_number||'')+'</span>':'<span style="color:var(--amber-500);font-size:12px;font-weight:600">Unassigned</span>')+'</td>'+
+            '<td>'+(e.cost_code_value?'<span style="font-family:monospace">'+e.cost_code_value+'</span><br><span style="font-size:11px;color:var(--gray-500)">'+(e.job_number||'')+'</span>':(e.time_off_type?'<span class="time-off-type" style="background:'+(TO_TYPE_COLORS[e.time_off_type]||['#eee','#333'])[0]+';color:'+(TO_TYPE_COLORS[e.time_off_type]||['#eee','#333'])[1]+'">'+(TO_TYPE_LABELS[e.time_off_type]||e.time_off_type)+'</span>':'<span style="color:var(--amber-500);font-size:12px;font-weight:600">Unassigned</span>'))+'</td>'+
             '<td>'+(total>0?Number(e.hours_regular).toFixed(1):'—')+'</td>'+
             '<td>'+(Number(e.hours_overtime)>0?'<strong style="color:var(--amber-500)">'+Number(e.hours_overtime).toFixed(1)+'</strong>':'—')+'</td>'+
             '<td>'+(Number(e.hours_double)>0?'<strong style="color:var(--red-500)">'+Number(e.hours_double).toFixed(1)+'</strong>':'—')+'</td>'+
             '<td>'+(Number(e.per_diem)>0?'$'+Number(e.per_diem).toFixed(0):'—')+'</td>'+
-            '<td><span class="badge" style="background:#e0e7ff;color:#3730a3">'+e.source+'</span></td>'+
+            '<td><span class="badge" style="background:'+(e.source==='time_off'?'#fce7f3;color:#9d174d':'#e0e7ff;color:#3730a3')+'">'+(e.source==='time_off'?'time off':e.source)+'</span></td>'+
             '<td><span class="badge '+sb(e.status)+'">'+e.status.replace('_',' ')+'</span></td>'+
             '<td style="white-space:nowrap">'+
               (canEdit?'<button class="btn btn-outline btn-sm" onclick="openEditModal('+e.id+')" style="margin-right:4px">Edit</button>':'')+
@@ -581,23 +581,38 @@ function renderManual(el){
   Promise.all([api('/api/employees'),api('/api/cost-codes')]).then(function(results){
     var emps=results[0],ccs=results[1];
     var today=new Date().toISOString().split('T')[0];
-    var reasons=[{v:'',l:'Select reason...'},{v:'forgot_to_punch',l:'Forgot to punch in/out'},{v:'wrong_cost_code',l:'Wrong cost code correction'},{v:'equipment_failure',l:'Equipment failure (kiosk down)'},{v:'supervisor_override',l:'Supervisor override'},{v:'schedule_change',l:'Schedule change'},{v:'other',l:'Other (must explain)'}];
+    var reasons=[{v:'',l:'Select reason...'},{v:'forgot_to_punch',l:'Forgot to punch in/out'},{v:'wrong_cost_code',l:'Wrong cost code correction'},{v:'equipment_failure',l:'Equipment failure (kiosk down)'},{v:'supervisor_override',l:'Supervisor override'},{v:'schedule_change',l:'Schedule change'},{v:'called_in',l:'Employee called in (absence)'},{v:'other',l:'Other (must explain)'}];
     var locs=[{v:'',l:'No Per Diem'},{v:'TX',l:'Texas (Local) — $69'},{v:'TX_TRAVEL',l:'Texas (Travel) — $235'},{v:'ABQ',l:'Albuquerque, NM — $232'},{v:'DEFAULT',l:'Standard GSA — $166'}];
+    var toTypes=[{v:'vacation',l:'Vacation'},{v:'sick',l:'Sick Leave'},{v:'pto',l:'Personal/PTO'},{v:'bereavement',l:'Bereavement'},{v:'jury_duty',l:'Jury Duty'},{v:'holiday',l:'Holiday'},{v:'comp',l:'Comp Time'}];
     el.innerHTML=
       '<div class="page-header"><div><h1>Manual Time Entry</h1><div class="subtitle">Admin entry — reason code required for SOX compliance.</div></div></div>'+
       '<form id="manual-form" onsubmit="submitManual(event)">'+
+        '<div class="card"><h2>Entry Type</h2>'+
+          '<div style="display:flex;gap:12px;margin-bottom:4px">'+
+            '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:12px 20px;border:2px solid var(--gray-200);border-radius:var(--radius);font-size:14px;font-weight:600" id="m-type-work-label" onclick="toggleManualType(\'work\')">'+
+              '<input type="radio" name="m-entry-type" value="work" checked style="width:auto"/> Regular Work'+
+            '</label>'+
+            '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:12px 20px;border:2px solid var(--gray-200);border-radius:var(--radius);font-size:14px;font-weight:600" id="m-type-timeoff-label" onclick="toggleManualType(\'timeoff\')">'+
+              '<input type="radio" name="m-entry-type" value="timeoff" style="width:auto"/> Time Off'+
+            '</label>'+
+          '</div>'+
+        '</div>'+
         '<div class="card"><h2>Entry Details</h2>'+
           '<div class="form-row">'+
             '<div class="form-group"><label>Employee *</label><select id="m-emp" required><option value="">Select employee...</option>'+emps.map(function(e){return '<option value="'+e.id+'">'+e.last_name+', '+e.first_name+' ('+e.employee_number+')</option>';}).join('')+'</select></div>'+
-            '<div class="form-group"><label>Cost Code *</label><select id="m-cc" required><option value="">Select cost code...</option>'+ccs.map(function(c){return '<option value="'+c.id+'">'+c.code+' — '+c.description+'</option>';}).join('')+'</select></div>'+
+            '<div class="form-group" id="m-cc-wrap"><label>Cost Code *</label><select id="m-cc" required><option value="">Select cost code...</option>'+ccs.map(function(c){return '<option value="'+c.id+'">'+c.code+' — '+c.description+'</option>';}).join('')+'</select></div>'+
+            '<div class="form-group" id="m-to-type-wrap" style="display:none"><label>Time Off Type *</label><select id="m-to-type">'+toTypes.map(function(t){return '<option value="'+t.v+'">'+t.l+'</option>';}).join('')+'</select></div>'+
           '</div>'+
           '<div class="form-row">'+
             '<div class="form-group"><label>Work Date *</label><input type="date" id="m-date" value="'+today+'" required/></div>'+
             '<div class="form-group"><label>Total Hours *</label><input type="number" id="m-hours" value="8" min="0.5" max="24" step="0.5" required/></div>'+
           '</div>'+
-          '<div class="form-row">'+
+          '<div class="form-row" id="m-perdiem-wrap">'+
             '<div class="form-group"><label>Per Diem Location</label><select id="m-loc">'+locs.map(function(l){return '<option value="'+l.v+'">'+l.l+'</option>';}).join('')+'</select></div>'+
             '<div class="form-group"><label>Notes</label><input id="m-notes" placeholder="Optional notes..."/></div>'+
+          '</div>'+
+          '<div class="form-row" id="m-notes-only-wrap" style="display:none">'+
+            '<div class="form-group" style="grid-column:1/-1"><label>Notes</label><input id="m-notes-to" placeholder="e.g. Employee called in sick, doctor note provided..."/></div>'+
           '</div>'+
         '</div>'+
         '<div class="card" style="border-left:4px solid var(--amber-500)">'+
@@ -608,18 +623,51 @@ function renderManual(el){
         '</div>'+
         '<div style="display:flex;justify-content:flex-end;gap:12px">'+
           '<button type="button" class="btn btn-outline" onclick="showPage(\'manual\')">Clear</button>'+
-          '<button type="submit" class="btn btn-primary">Save Entry</button>'+
+          '<button type="submit" class="btn btn-primary" id="m-submit-btn">Save Entry</button>'+
         '</div>'+
       '</form>';
   });
 }
+
+window.toggleManualType=function(type){
+  var isTimeOff=type==='timeoff';
+  document.getElementById('m-cc-wrap').style.display=isTimeOff?'none':'';
+  document.getElementById('m-to-type-wrap').style.display=isTimeOff?'':'none';
+  document.getElementById('m-perdiem-wrap').style.display=isTimeOff?'none':'';
+  document.getElementById('m-notes-only-wrap').style.display=isTimeOff?'':'none';
+  var ccSel=document.getElementById('m-cc');
+  if(isTimeOff){ccSel.removeAttribute('required');}else{ccSel.setAttribute('required','');}
+  document.getElementById('m-type-work-label').style.borderColor=isTimeOff?'var(--gray-200)':'var(--blue-600)';
+  document.getElementById('m-type-work-label').style.background=isTimeOff?'':'#eff6ff';
+  document.getElementById('m-type-timeoff-label').style.borderColor=isTimeOff?'var(--blue-600)':'var(--gray-200)';
+  document.getElementById('m-type-timeoff-label').style.background=isTimeOff?'#eff6ff':'';
+};
 
 window.submitManual=function(e){
   e.preventDefault();
   var reason=document.getElementById('m-reason').value;
   if(!reason){showToast('Reason code is REQUIRED for manual entries',true);return;}
   if(reason==='other'){var note=(document.getElementById('m-reason-note').value||'').trim();if(note.length<5){showToast('Explanation required (min 5 chars) for "Other"',true);return;}}
-  var body={employee_id:parseInt(document.getElementById('m-emp').value),cost_code_id:parseInt(document.getElementById('m-cc').value),work_date:document.getElementById('m-date').value,total_hours:parseFloat(document.getElementById('m-hours').value),per_diem_location:document.getElementById('m-loc').value||null,notes:document.getElementById('m-notes').value||null,reason_code:reason,reason_note:document.getElementById('m-reason-note')?document.getElementById('m-reason-note').value:null,source:'manual',created_by:15};
+  var isTimeOff=document.querySelector('input[name="m-entry-type"]:checked').value==='timeoff';
+  var body={
+    employee_id:parseInt(document.getElementById('m-emp').value),
+    work_date:document.getElementById('m-date').value,
+    total_hours:parseFloat(document.getElementById('m-hours').value),
+    reason_code:reason,
+    reason_note:document.getElementById('m-reason-note')?document.getElementById('m-reason-note').value:null,
+    created_by:15
+  };
+  if(isTimeOff){
+    body.source='time_off';
+    body.time_off_type=document.getElementById('m-to-type').value;
+    body.notes=document.getElementById('m-notes-to').value||null;
+    body.cost_code_id=null;
+  }else{
+    body.source='manual';
+    body.cost_code_id=parseInt(document.getElementById('m-cc').value);
+    body.per_diem_location=document.getElementById('m-loc').value||null;
+    body.notes=document.getElementById('m-notes').value||null;
+  }
   api('/api/time-entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(result){
     if(result.error){showToast('Error: '+result.error,true);return;}
     showToast('Entry saved successfully');showPage('manual');
