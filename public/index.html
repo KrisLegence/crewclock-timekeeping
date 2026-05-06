@@ -856,7 +856,7 @@ function renderSidebarNav(){
   }else if(currentRole==='foreman'){
     items=[{page:'dashboard',label:'Dashboard'},{page:'huddle',label:'Crew Huddle'},{page:'entries',label:'Time Entries'},{page:'manual',label:'Manual Entry'},{page:'time-off',label:'Request Time Off'}];
   }else{
-    items=[{page:'dashboard',label:'Dashboard'},{page:'huddle',label:'Crew Huddle'},{page:'entries',label:'Time Entries'},{page:'manual',label:'Manual Entry'},{page:'manage-time-off',label:'Manage Time Off'},{page:'validation',label:'Review & Fix'},{page:'export',label:'Sage 300 Export'},{page:'audit',label:'Audit Trail'}];
+    items=[{page:'dashboard',label:'Dashboard'},{page:'entries',label:'Time Entries'},{page:'manual',label:'Manual Entry'},{page:'manage-time-off',label:'Manage Time Off'},{page:'validation',label:'Review & Fix'},{page:'export',label:'Sage 300 Export'},{page:'audit',label:'Audit Trail'}];
   }
   nav.innerHTML=items.map(function(it){
     return '<a data-page="'+it.page+'"'+(currentPage===it.page?' class="active"':'')+' onclick="showPage(\''+it.page+'\')"><span>'+it.label+'</span></a>';
